@@ -1,6 +1,26 @@
+# --- Python Defaults ---
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints
+.env
+.venv
+venv/
+ENV/
+
+# --- Mac System Files ---
+.DS_Store
+
+# --- VS Code ---
+.vscode/
+
+# --- PROJECT DATA (The Important Part) ---
 All Data/
 data/
+database/raw_bids/
+database/processed_zarr/
 *.czi
 *.tiff
+*.tif
+*.ome.zarr
 *.zarr
-.DS_Store
