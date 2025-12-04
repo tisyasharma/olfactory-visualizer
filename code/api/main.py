@@ -208,32 +208,6 @@ def status():
     return {"subjects": subs, "files": files, "counts": counts}
 
 
-@app.get("/scrna/samples")
-def scrna_samples():
-    return fetch_all("SELECT sample_id, subject_id, tissue, prep, date_run, protocol FROM scrna_samples ORDER BY sample_id")
-
-
-@app.get("/scrna/clusters")
-def scrna_clusters(sample_id: Optional[str] = None):
-    q = "SELECT sample_id, cluster_id, n_cells, description FROM scrna_clusters"
-    params = {}
-    if sample_id:
-        q += " WHERE sample_id = :sid"
-        params["sid"] = sample_id
-    q += " ORDER BY sample_id, cluster_id"
-    return fetch_all(q, params)
-
-
-@app.get("/scrna/markers")
-def scrna_markers(sample_id: str, cluster_id: str, limit: int = Query(50, ge=1, le=500)):
-    q = """
-    SELECT sample_id, cluster_id, gene, logfc, pval_adj
-    FROM scrna_cluster_markers
-    WHERE sample_id = :sid AND cluster_id = :cid
-    ORDER BY logfc DESC
-    LIMIT :lim
-    """
-    return fetch_all(q, {"sid": sample_id, "cid": cluster_id, "lim": limit})
 
 
 @app.post("/upload/microscopy")
