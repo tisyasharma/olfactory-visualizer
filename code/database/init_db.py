@@ -1,18 +1,26 @@
 import sys
 import os
+from pathlib import Path
 from sqlalchemy import text
 
-# Fix path so we can import 'connect.py' from the same folder
-sys.path.append(os.path.join(os.getcwd(), 'code', 'database'))
+# Fix path so we can import 'connect.py' regardless of where this script is run
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+sys.path.append(str(HERE))
 try:
     from connect import get_engine
 except ImportError:
-    print("❌ ERROR: Could not find connect.py. Make sure you run this from the 'capstone' root folder.")
-    sys.exit(1)
+    # fallback to repo root layout
+    sys.path.append(str(ROOT / "code" / "database"))
+    try:
+        from connect import get_engine
+    except ImportError:
+        print("❌ ERROR: Could not find connect.py. Run from repo root or ensure code/database is on PYTHONPATH.")
+        sys.exit(1)
 
 def init_database():
     engine = get_engine()
-    schema_path = os.path.join("code", "database", "schema.sql")
+    schema_path = HERE / "schema.sql"
     
     print(f"Reading schema from: {schema_path}")
     
@@ -27,7 +35,7 @@ def init_database():
             print("✅ SUCCESS: Tables created! (public imaging + rna schema)")
             
     except FileNotFoundError:
-        print("❌ ERROR: schema.sql not found. Did you create it in code/database/?")
+        print(f"❌ ERROR: schema.sql not found at {schema_path}. Run from repo root or ensure the file exists.")
 
 if __name__ == "__main__":
     init_database()

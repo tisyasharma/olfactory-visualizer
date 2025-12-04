@@ -64,7 +64,7 @@ def convert_subject(folder_name, metadata):
         BIDS_ROOT, 
         metadata['subject'], 
         metadata['session'], 
-        'micr'
+        'microscopy'
     )
     
     # AUTO-CLEAN: If this folder exists from a failed run, delete it first.

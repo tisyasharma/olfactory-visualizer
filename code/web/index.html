@@ -70,8 +70,9 @@
           <label>Laterality
             <select id="lateralitySelect">
               <option value="all" selected>All</option>
-              <option value="bilateral">bilateral</option>
-              <option value="ipsilateral">ipsilateral</option>
+              <option value="bilateral">Bilateral</option>
+              <option value="ipsi">Ipsilateral</option>
+              <option value="contra">Contralateral</option>
             </select>
           </label>
 
@@ -181,12 +182,32 @@
         <input id="fileInput" type="file" multiple aria-label="Upload files" />
         <div class="uploader__icon">⬆</div>
         <div class="uploader__text">
-          <strong>Drag & drop</strong> files here or <span class="linklike" id="browseLink">browse</span>
-          <div class="uploader__hint">CSV, JSON, H5/H5AD, PNG/JPG, YAML/TOML — one mouse per upload</div>
+          <strong>Drag & drop</strong> image slices here.<br/>
+          Use the buttons below to add images and each hemisphere CSV.
+          <div class="uploader__hint">PNG/JPG/TIFF slices — one mouse/session per upload</div>
         </div>
       </div>
 
-      <div id="fileList" class="file-list"></div>
+      <details id="imageListWrap" class="file-list file-list--collapsible" open>
+        <summary class="file-list__summary">Image files</summary>
+        <div id="imageList" class="file-list__body"></div>
+      </details>
+
+      <div class="counts-upload">
+        <div class="counts-upload__head">
+          <span class="file-list__title">Quantification CSVs (upload together — bilateral, ipsilateral, contralateral)</span>
+        </div>
+        <div class="counts-upload__controls">
+          <button class="btn btn--mini" id="addImagesBtn">Add Images</button>
+          <button class="btn btn--mini" id="addCsvBilateral">Add Bilateral CSV</button>
+          <button class="btn btn--mini" id="addCsvLeft">Add Ipsilateral CSV</button>
+          <button class="btn btn--mini" id="addCsvRight">Add Contralateral CSV</button>
+          <input id="csvInputBilateral" type="file" accept=".csv" hidden />
+          <input id="csvInputLeft" type="file" accept=".csv" hidden />
+          <input id="csvInputRight" type="file" accept=".csv" hidden />
+        </div>
+        <div id="csvList" class="file-list"></div>
+      </div>
 
       <div class="actions">
         <button id="registerBtn" class="btn">Register Experiment</button>

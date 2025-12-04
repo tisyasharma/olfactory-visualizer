@@ -1,4 +1,5 @@
 from typing import List, Optional
+import hashlib
 import tempfile
 import shutil
 from pathlib import Path
@@ -11,7 +12,7 @@ from sqlalchemy import text
 
 from code.database.connect import get_engine
 from code.database.ingest_upload import ingest
-from code.database.etl import ingest_counts_csv
+from code.database.etl import ingest_counts_csv, get_or_create_session_id
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
@@ -31,6 +32,25 @@ def favicon():
     if ico.exists():
         return FileResponse(str(ico))
     raise HTTPException(status_code=404, detail="favicon not found")
+
+
+def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id: Optional[str]) -> str:
+    sid = (session_id or "").strip()
+    if sid.lower() == "auto" or sid == "":
+        with engine.connect() as conn:
+            sid = get_or_create_session_id(conn, subject_id, experiment_type)
+    return sid
+
+
+def sha256_path(path: Path, chunk_size: int = 1_048_576) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def fetch_all(query: str, params: dict = None):
@@ -219,7 +239,7 @@ def scrna_markers(sample_id: str, cluster_id: str, limit: int = Query(50, ge=1, 
 @app.post("/upload/microscopy")
 async def upload_microscopy(
     subject_id: str = Form(..., description="BIDS subject id (e.g., sub-DBL_A)"),
-    session_id: str = Form(..., description="BIDS session id (e.g., ses-dbl)"),
+    session_id: str = Form(..., description="BIDS session id (e.g., ses-dbl or 'auto')"),
     hemisphere: str = Form("bilateral", regex="^(left|right|bilateral)$"),
     pixel_size_um: float = Form(1.0),
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
@@ -230,29 +250,55 @@ async def upload_microscopy(
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-    allowed_ext = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".ome.tif", ".ome.tiff", ".zarr", ".ome.zarr")
+    image_ext = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".ome.tif", ".ome.tiff", ".zarr", ".ome.zarr")
 
     tmpdir = Path(tempfile.mkdtemp())
-    saved_paths = []
+    saved_paths: List[Path] = []
     try:
+        engine = get_engine()
+        session_id = resolve_session_id(engine, subject_id, experiment_type, session_id)
+        # prevent duplicate experiment loads
+        with engine.connect() as conn:
+            already = conn.execute(
+                text("SELECT 1 FROM microscopy_files WHERE session_id = :sid LIMIT 1"),
+                {"sid": session_id},
+            ).first()
+            if already:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Session {session_id} already has microscopy files registered. Duplicate ingest blocked.",
+                )
+        # Stage uploads to temp
         for uf in files:
             fname = uf.filename or ""
-            if not fname.lower().endswith(allowed_ext):
+            lower = fname.lower()
+            if not lower.endswith(image_ext):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type for {fname}. Upload images only.")
-            dest = tmpdir / uf.filename
+            dest = tmpdir / fname
             with dest.open("wb") as f:
                 shutil.copyfileobj(uf.file, f)
             saved_paths.append(dest)
 
-        ingested = ingest(
-            subject=subject_id,
-            session=session_id,
-            hemisphere=hemisphere,
-            files=saved_paths,
-            pixel_size_um=pixel_size_um,
-            experiment_type=experiment_type,
-        )
-        return {"ingested": [str(p) for p in ingested]}
+        if not saved_paths:
+            raise HTTPException(status_code=400, detail="No valid image files found in upload.")
+
+        # Stable order so run numbering is deterministic when folder uploads are used
+        all_images = sorted(saved_paths, key=lambda p: p.name)
+
+        try:
+            ingested = ingest(
+                subject=subject_id,
+                session=session_id,
+                hemisphere=hemisphere,
+                files=all_images,
+                pixel_size_um=pixel_size_um,
+                experiment_type=experiment_type,
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Microscopy ingest failed: {e}")
+        return {"status": "ok", "ingested": [str(p) for p in ingested], "files_processed": [p.name for p in all_images]}
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -261,7 +307,7 @@ async def upload_microscopy(
 async def upload_region_counts(
     subject_id: str = Form(..., description="BIDS subject id (e.g., sub-DBL_A)"),
     session_id: Optional[str] = Form(None, description="BIDS session id (e.g., ses-dbl)"),
-    hemisphere: str = Form("bilateral", regex="^(left|right|bilateral)$"),
+    hemisphere: str = Form("auto", regex="^(left|right|bilateral|auto)$"),
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
     files: List[UploadFile] = File(...),
 ):
@@ -270,11 +316,14 @@ async def upload_region_counts(
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
+    engine = get_engine()
+    sess = resolve_session_id(engine, subject_id, experiment_type, session_id)
 
     tmpdir = Path(tempfile.mkdtemp())
     rows = 0
     try:
         saved = []
+        saved_hashes = {}
         for uf in files:
             if not uf.filename.lower().endswith(".csv"):
                 raise HTTPException(status_code=400, detail=f"Unsupported file type for {uf.filename}. Upload CSV only.")
@@ -282,13 +331,54 @@ async def upload_region_counts(
             with dest.open("wb") as f:
                 shutil.copyfileobj(uf.file, f)
             saved.append(dest)
+            saved_hashes[dest] = sha256_path(dest)
 
-        engine = get_engine()
+        with engine.connect() as conn:
+            # Block duplicate ingest for the same session if any region_counts already linked
+            dup = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM region_counts rc
+                    JOIN microscopy_files mf ON rc.file_id = mf.file_id
+                    WHERE mf.session_id = :sid
+                    LIMIT 1
+                    """
+                ),
+                {"sid": sess},
+            ).first()
+            if dup:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Session {sess} already has quantification rows registered. Duplicate ingest blocked.",
+                )
+            # Block identical file contents if checksum already ingested
+            for chk in saved_hashes.values():
+                existing = conn.execute(
+                    text("SELECT 1 FROM ingest_log WHERE checksum = :c AND status = 'success' LIMIT 1"),
+                    {"c": chk},
+                ).first()
+                if existing:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="This quantification file matches a previously ingested file (checksum duplicate).",
+                    )
         for path in saved:
             try:
-                rows += ingest_counts_csv(engine, path, subject_id, session_id, hemisphere, experiment_type)
+                rows += ingest_counts_csv(engine, path, subject_id, sess, hemisphere, experiment_type)
+                # log checksum for dedupe
+                chk = saved_hashes.get(path)
+                if chk:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text(
+                                "INSERT INTO ingest_log (source_path, checksum, rows_loaded, status, message) "
+                                "VALUES (:p, :c, :r, :s, :m)"
+                            ),
+                            {"p": str(path), "c": chk, "r": rows, "s": "success", "m": f"upload {sess}"},
+                        )
             except ValueError as e:
                 raise HTTPException(status_code=400, detail=str(e))
-        return {"rows_ingested": rows}
+        return {"status": "ok", "rows_ingested": rows}
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

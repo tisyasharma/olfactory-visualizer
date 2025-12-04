@@ -89,8 +89,13 @@ async function embedVL(targetId, spec){
 // Placeholder updaters (no data yet)
 function normalizeHemisphere(val){
   if(!val || val === 'all') return null;
+  if(val === 'ipsi') return 'left';
+  if(val === 'contra') return 'right';
   if(['left','right','bilateral'].includes(val)) return val;
   return null;
+}
+function mapLateralityToApi(val){
+  return normalizeHemisphere(val) || 'bilateral';
 }
 
 // Data fetchers for future charts (kept for reuse)
@@ -176,8 +181,7 @@ async function updateRegionalCharts(params){
 /* === Upload Center Logic === */
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
-const browseLink = document.getElementById('browseLink');
-const fileList = document.getElementById('fileList');
+const imageList = document.getElementById('imageList');
 const registerBtn = document.getElementById('registerBtn');
 const clearBtn = document.getElementById('clearBtn');
 const uploadStatus = document.getElementById('uploadStatus');
@@ -186,12 +190,29 @@ const uploadModality = document.getElementById('uploadModality');
 const uploadMouse = document.getElementById('uploadMouse');
 const uploadDate = document.getElementById('uploadDate');
 const uploadProtocol = document.getElementById('uploadProtocol');
-const queue = [];
+const imageQueue = [];
+const pendingCsv = [];
+const countsQueues = { bilateral: [], left: [], right: [] };
 const IMAGE_EXT = ['.png','.jpg','.jpeg','.tif','.tiff','.ome.tif','.ome.tiff','.zarr','.ome.zarr'];
 const CSV_EXT = ['.csv'];
+const addImagesBtn = document.getElementById('addImagesBtn');
+const addCsvBilateral = document.getElementById('addCsvBilateral');
+const addCsvLeft = document.getElementById('addCsvLeft');
+const addCsvRight = document.getElementById('addCsvRight');
+const csvInputBilateral = document.getElementById('csvInputBilateral');
+const csvInputLeft = document.getElementById('csvInputLeft');
+const csvInputRight = document.getElementById('csvInputRight');
+const csvList = document.getElementById('csvList');
 
-browseLink?.addEventListener('click', () => fileInput?.click());
-fileInput?.addEventListener('change', (e) => addFiles([...e.target.files]));
+addImagesBtn?.addEventListener('click', () => fileInput?.click());
+fileInput?.addEventListener('change', (e) => addFiles([...e.target.files], 'image'));
+addCsvBilateral?.addEventListener('click', () => csvInputBilateral?.click());
+addCsvLeft?.addEventListener('click', () => csvInputLeft?.click());
+addCsvRight?.addEventListener('click', () => csvInputRight?.click());
+csvInputBilateral?.addEventListener('change', (e) => addFiles([...e.target.files], 'bilateral'));
+csvInputLeft?.addEventListener('change', (e) => addFiles([...e.target.files], 'left'));
+csvInputRight?.addEventListener('change', (e) => addFiles([...e.target.files], 'right'));
+updateReadyStates();
 
 ['dragenter','dragover'].forEach(evt => {
   dropzone?.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('is-hover'); });
@@ -201,24 +222,43 @@ fileInput?.addEventListener('change', (e) => addFiles([...e.target.files]));
 });
 dropzone?.addEventListener('drop', (e) => {
   const files = [...e.dataTransfer.files];
-  addFiles(files);
+  const images = files.filter(f => IMAGE_EXT.some(ext => (f.name || '').toLowerCase().endsWith(ext)));
+  const csvs = files.filter(f => CSV_EXT.some(ext => (f.name || '').toLowerCase().endsWith(ext)));
+  if(images.length){ addFiles(images, 'image'); }
+  if(csvs.length){ addFiles(csvs, 'pending'); }
 });
 
-function addFiles(files){
-  const rejected = [];
-  files.forEach(f => {
-    const name = (f.name || '').toLowerCase();
-    const isCsv = CSV_EXT.some(ext => name.endsWith(ext));
-    const isImage = IMAGE_EXT.some(ext => name.endsWith(ext));
-    if(!(isCsv || isImage)){
+function addFiles(files, target){
+const rejected = [];
+files.forEach(f => {
+  const name = (f.name || '').toLowerCase();
+  const isCsv = CSV_EXT.some(ext => name.endsWith(ext));
+  const isImage = IMAGE_EXT.some(ext => name.endsWith(ext));
+  if(target === 'image' && !isImage){
+    rejected.push(f.name || 'unknown');
+    return;
+  }
+    if(target !== 'image' && !isCsv){
       rejected.push(f.name || 'unknown');
       return;
     }
-    if(!queue.find(q => q.name === f.name && q.size === f.size)){
-      queue.push(f);
+  if(target === 'image'){
+    if(!imageQueue.find(q => q.name === f.name && q.size === f.size)){
+      imageQueue.push(f);
+    }
+    }else if(target && ['bilateral','left','right'].includes(target)){
+      const bucket = countsQueues[target];
+      if(!bucket.find(q => q.name === f.name && q.size === f.size)){
+        bucket.push(f);
+      }
+    }else if(target === 'pending'){
+      if(!pendingCsv.find(q => q.name === f.name && q.size === f.size)){
+        pendingCsv.push(f);
+      }
     }
   });
-  renderFileList();
+  renderFileLists();
+  updateReadyStates();
   if(rejected.length){
     setWarning(`Rejected unsupported file types: ${rejected.join(', ')}`);
   }else{
@@ -226,23 +266,75 @@ function addFiles(files){
   }
 }
 
-function renderFileList(){
-  if(!fileList) return;
-  if(queue.length === 0){ fileList.innerHTML = ''; return; }
-  fileList.innerHTML = '<div class="file-list__title">Files to register</div>' +
-    queue.map((f,idx) => `<div class="file-item" data-idx="${idx}"><span>${f.name}</span><span class="muted">${prettyBytes(f.size)}</span><button class="btn btn--mini remove-file" aria-label="Remove ${f.name}">×</button></div>`).join('');
-}
-
-fileList?.addEventListener('click', (e) => {
-  const t = e.target;
-  if(t && t.classList && t.classList.contains('remove-file')){
-    const item = t.closest('.file-item');
-    const idx = +item.getAttribute('data-idx');
-    if(!isNaN(idx)){
-      queue.splice(idx, 1);
-      renderFileList();
+function renderFileLists(){
+  if(imageList){
+    if(imageQueue.length === 0){ imageList.innerHTML = ''; }
+    else {
+      imageList.innerHTML =
+        imageQueue.map((f,idx) => `<div class="file-item" data-type="image" data-idx="${idx}"><span>${f.name}</span><span class="muted">${prettyBytes(f.size)}</span><button class="btn btn--mini remove-file" aria-label="Remove ${f.name}">×</button></div>`).join('');
     }
   }
+  if(csvList){
+    const rows = [];
+    // pending with assign dropdown
+    pendingCsv.forEach((f, idx) => {
+      rows.push(`<div class="file-item" data-type="pending" data-idx="${idx}">
+        <span>UNASSIGNED: ${f.name}</span>
+        <span class="muted">${prettyBytes(f.size)}</span>
+        <select class="csv-assign" data-idx="${idx}">
+          <option value="">Assign hemisphere</option>
+          <option value="bilateral">Bilateral</option>
+          <option value="left">Ipsilateral</option>
+          <option value="right">Contralateral</option>
+        </select>
+        <button class="btn btn--mini remove-file" aria-label="Remove ${f.name}">×</button>
+      </div>`);
+    });
+    const pushRow = (label, bucket) => {
+      bucket.forEach((f, idx) => {
+        rows.push(`<div class="file-item" data-type="${label}" data-idx="${idx}"><span>${label.toUpperCase()}: ${f.name}</span><span class="muted">${prettyBytes(f.size)}</span><button class="btn btn--mini remove-file" aria-label="Remove ${f.name}">×</button></div>`);
+      });
+    };
+    pushRow('bilateral', countsQueues.bilateral);
+    pushRow('left', countsQueues.left);
+    pushRow('right', countsQueues.right);
+    if(rows.length === 0){ csvList.innerHTML = ''; }
+    else {
+      csvList.innerHTML = '<div class="file-list__title">Quantification CSVs</div>' + rows.join('');
+    }
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if(t && t.classList && t.classList.contains('csv-assign')){
+    const idx = +t.getAttribute('data-idx');
+    const val = t.value;
+    if(!isNaN(idx) && ['bilateral','left','right'].includes(val)){
+      const f = pendingCsv[idx];
+      if(f){
+        pendingCsv.splice(idx, 1);
+        countsQueues[val].push(f);
+        renderFileLists();
+        updateReadyStates();
+      }
+    }
+    return;
+  }
+  if(!(t && t.classList && t.classList.contains('remove-file'))) return;
+  const item = t.closest('.file-item');
+  const idx = +item.getAttribute('data-idx');
+  const type = item.getAttribute('data-type');
+  if(isNaN(idx) || !type) return;
+  if(type === 'image'){
+    imageQueue.splice(idx, 1);
+  }else if(['bilateral','left','right'].includes(type)){
+    countsQueues[type].splice(idx, 1);
+  }else if(type === 'pending'){
+    pendingCsv.splice(idx, 1);
+  }
+  renderFileLists();
+  updateReadyStates();
 });
 
 clearBtn?.addEventListener('click', () => {
@@ -270,30 +362,50 @@ registerBtn?.addEventListener('click', async () => {
     setWarning('Please choose a modality and provide a Mouse ID.');
     return;
   }
-  if(queue.length === 0){
-    setWarning('Add at least one file for this mouse experiment.');
+  const hasImages = imageQueue.length > 0;
+  const totalCsv = countsQueues.bilateral.length + countsQueues.left.length + countsQueues.right.length;
+  if(pendingCsv.length > 0){
+    setWarning('Assign all quantification CSVs to bilateral/ipsilateral/contralateral before submitting.');
+    return;
+  }
+  if(!hasImages || totalCsv === 0){
+    setWarning('Add image slices and quantification CSVs (bilateral/ipsilateral/contralateral) before submitting.');
     return;
   }
   const hemiVal = lateralitySelect?.value;
-  const hemisphere = (!hemiVal || hemiVal === 'all') ? 'bilateral' : hemiVal;
+  const hemisphere = mapLateralityToApi(!hemiVal ? 'all' : hemiVal);
   const experimentType = modality === 'rabies' ? 'rabies' : 'double_injection';
   const sessionId = (uploadProtocol?.value && uploadProtocol.value.trim())
     ? uploadProtocol.value.trim().replace(/\s+/g, '-').toLowerCase()
-    : `ses-${modality}`;
+    : 'auto';
 
-  const csvFiles = queue.filter(f => f.name.toLowerCase().endsWith('.csv'));
-  const imageFiles = queue.filter(f => !f.name.toLowerCase().endsWith('.csv'));
+  const csvFiles = {
+    bilateral: countsQueues.bilateral.slice(),
+    left: countsQueues.left.slice(),
+    right: countsQueues.right.slice()
+  };
+  const imageFiles = imageQueue.slice();
+
+  const confirmMsg = `You are about to ingest ${imageFiles.length} image(s) and ${totalCsv} CSV file(s) for ${mouse} (${sessionId}). This will write to the database. Continue?`;
+  if(!window.confirm(confirmMsg)){
+    return;
+  }
 
   try{
     if(imageFiles.length){
       await uploadMicroscopy(modality, mouse, sessionId, hemisphere, imageFiles);
     }
-    if(csvFiles.length){
-      await uploadRegionCounts(experimentType, mouse, sessionId, hemisphere, csvFiles);
+    if(csvFiles.bilateral.length){
+      await uploadRegionCounts(experimentType, mouse, sessionId, 'bilateral', csvFiles.bilateral);
     }
-    setStatus(`Uploaded ${imageFiles.length} image(s) and ${csvFiles.length} CSV(s) for ${mouse} -> ${sessionId}`);
-    queue.splice(0, queue.length);
-    renderFileList();
+    if(csvFiles.left.length){
+      await uploadRegionCounts(experimentType, mouse, sessionId, 'left', csvFiles.left);
+    }
+    if(csvFiles.right.length){
+      await uploadRegionCounts(experimentType, mouse, sessionId, 'right', csvFiles.right);
+    }
+    setStatus(`Uploaded ${imageFiles.length} image(s) and ${totalCsv} CSV(s) for ${mouse} -> ${sessionId}`);
+    resetUploadForm();
     loadSubjects();
     loadSamples();
     loadFiles();
@@ -311,6 +423,17 @@ function setWarning(msg){
   if(!msg){ uploadWarning.hidden = true; return; }
     if(uploadWarning){ uploadWarning.textContent = msg; uploadWarning.hidden = false; }
     if(uploadStatus){ uploadStatus.hidden = true; }
+}
+
+function updateReadyStates(){
+  const toggle = (el, ready) => {
+    if(!el) return;
+    el.classList.toggle('btn--ready', !!ready);
+  };
+  toggle(addImagesBtn, imageQueue.length > 0);
+  toggle(addCsvBilateral, countsQueues.bilateral.length > 0);
+  toggle(addCsvLeft, countsQueues.left.length > 0);
+  toggle(addCsvRight, countsQueues.right.length > 0);
 }
 
 function prettyBytes(bytes){
@@ -345,8 +468,13 @@ async function uploadMicroscopy(modality, mouse, sessionId, hemisphere, files){
 }
 
 function resetUploadForm(){
-  queue.splice(0, queue.length);
-  renderFileList();
+  imageQueue.splice(0, imageQueue.length);
+  pendingCsv.splice(0, pendingCsv.length);
+  countsQueues.bilateral.splice(0, countsQueues.bilateral.length);
+  countsQueues.left.splice(0, countsQueues.left.length);
+  countsQueues.right.splice(0, countsQueues.right.length);
+  renderFileLists();
+  updateReadyStates();
   [uploadModality, uploadMouse, uploadDate, uploadProtocol].forEach(el => {
     if(!el) return;
     if(el.tagName === 'SELECT'){ el.selectedIndex = 0; }
@@ -354,6 +482,9 @@ function resetUploadForm(){
     el.classList.remove('has-value');
   });
   if(fileInput){ fileInput.value = ''; }
+  if(csvInputBilateral){ csvInputBilateral.value = ''; }
+  if(csvInputLeft){ csvInputLeft.value = ''; }
+  if(csvInputRight){ csvInputRight.value = ''; }
   setWarning('');
   if(uploadStatus){ uploadStatus.hidden = true; uploadStatus.textContent = ''; }
 }
@@ -365,7 +496,17 @@ async function uploadRegionCounts(experimentType, mouse, sessionId, hemisphere, 
   if(sessionId){ form.append('session_id', sessionId); }
   form.append('hemisphere', hemisphere || 'bilateral');
   form.append('experiment_type', experimentType);
-  files.forEach(f => form.append('files', f, f.name));
+  files.forEach(f => {
+    let fname = f.name || 'counts.csv';
+    if(hemisphere === 'left' && !fname.toLowerCase().startsWith('left_')){
+      fname = `Left_${fname}`;
+    }else if(hemisphere === 'right' && !fname.toLowerCase().startsWith('right_')){
+      fname = `Right_${fname}`;
+    }else if(hemisphere === 'bilateral' && !fname.toLowerCase().startsWith('bilateral_')){
+      fname = `Bilateral_${fname}`;
+    }
+    form.append('files', f, fname);
+  });
 
   const res = await fetch(`${API}/upload/region-counts`, {
     method: 'POST',

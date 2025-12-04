@@ -12,6 +12,7 @@ Usage (example):
 import argparse
 import hashlib
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -31,12 +32,23 @@ BIDS_ROOT = ROOT / "data" / "raw_bids"
 
 def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            h.update(chunk)
+    if path.is_dir():
+        # Deterministic walk so the same tree hashes identically
+        for sub in sorted(p for p in path.rglob("*") if p.is_file()):
+            h.update(str(sub.relative_to(path)).encode())
+            with sub.open("rb") as f:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+    else:
+        with path.open("rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                h.update(chunk)
     return h.hexdigest()
 
 
@@ -84,6 +96,7 @@ def write_sidecar(dest: Path, subject: str, session: str, run: int, hemisphere: 
 
 def ensure_dataset_files():
     """Ensure dataset_description exists at BIDS root."""
+    BIDS_ROOT.mkdir(parents=True, exist_ok=True)
     dd = BIDS_ROOT / "dataset_description.json"
     if not dd.exists():
         dd.write_text(json.dumps({
@@ -136,6 +149,17 @@ def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel
             write_sidecar(dest, subject, session, idx, hemisphere, experiment_type, pixel_size_um)
             validate_outputs(dest)
             sha = file_sha256(dest)
+            # reject duplicate content
+            dup = conn.execute(
+                text("SELECT 1 FROM microscopy_files WHERE sha256 = :sha LIMIT 1"),
+                {"sha": sha},
+            ).first()
+            if dup:
+                # clean up created files to avoid orphaned duplicates
+                shutil.rmtree(dest, ignore_errors=True)
+                sidecar = dest.with_suffix(dest.suffix + ".json")
+                sidecar.unlink(missing_ok=True)
+                raise ValueError(f"Duplicate microscopy content detected (sha256 already exists) for {src.name}")
 
             # register file
             conn.execute(
