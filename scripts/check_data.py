@@ -1,15 +1,21 @@
-import sys
-import os
+from pathlib import Path
 from sqlalchemy import text
 
-# Add the database folder to path so we can grab the connection tool
-sys.path.append(os.path.join(os.getcwd(), 'code', 'database'))
+from code.database.connect import get_engine
 
-try:
-    from connect import get_engine
-except ImportError:
-    print("❌ Could not find connect.py. Are you running from the root 'capstone' folder?")
-    sys.exit(1)
+
+def scan_image_folder(base_path: Path, folder_name: str):
+    target = base_path / folder_name
+    if not target.exists():
+        print(f"[WARN] Folder not found: {target}")
+        return
+    files = sorted([f for f in target.iterdir() if f.is_file() and f.suffix.lower() in {'.png', '.tif', '.tiff', '.jpg', '.jpeg'}])
+    print(f"\n--- Files in {folder_name} ---")
+    print(f"Total count: {len(files)}")
+    if files:
+        print("First 3 files:", [p.name for p in files[:3]])
+        print("Last 3 files: ", [p.name for p in files[-3:]])
+
 
 def verify_data():
     engine = get_engine()
@@ -42,5 +48,15 @@ def verify_data():
             for row in result:
                 print(f"  - Mouse {row[0]} | Region: {row[1][:20]}... | Pixels: {row[2]} | Side: {row[3]}")
 
-if __name__ == "__main__":
+
+def main():
     verify_data()
+    base_path = Path("data/sourcedata/Images")
+    if base_path.exists():
+        print("\n--- 🗂️ Image Folder Sanity ---")
+        for folder in ["DBL_A", "RabiesA_Vglut1"]:
+            scan_image_folder(base_path, folder)
+
+
+if __name__ == "__main__":
+    main()
