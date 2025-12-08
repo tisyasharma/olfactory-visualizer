@@ -110,7 +110,15 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
                     )
 
             for r in df.itertuples(index=False):
+                # Images are bilateral; quant is split by hemisphere. Prefer hemi match, else use bilateral image.
                 file_id = file_map.get((subject_id, hemi))
+                if not file_id and hemi in ("left", "right"):
+                    # fall back to bilateral microscopy if ipsi/contra not present
+                    file_id = file_map.get((subject_id, "bilateral"))
+                if not file_id:
+                    stats["counts_skipped_missing_file"] = stats.get("counts_skipped_missing_file", 0) + 1
+                    continue
+
                 sess = session_cache.get(subject_id)
                 if not sess:
                     sess = get_or_create_session_id(None, subject_id, exp_type, existing_sessions, existing_session_ids)

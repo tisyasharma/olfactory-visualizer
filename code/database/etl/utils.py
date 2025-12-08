@@ -55,17 +55,23 @@ def session_prefix(exp_type: str) -> str:
 def get_or_create_session_id(conn, subject_id: str, exp_type: str, existing_sessions: dict | None = None, existing_ids: list[str] | None = None) -> str:
     """
     Return a session_id for a subject. If sessions exist for the subject, reuse the first.
-    Otherwise, generate the next available subject-prefixed label (e.g., sub-rab01_ses-rab02).
+    Otherwise, generate the next available subject-prefixed session id (e.g., sub-rab01_ses-rab02).
     Does not insert rows here; caller can insert with ON CONFLICT DO NOTHING. Mutates existing_ids if provided.
     """
     subj_sessions = existing_sessions.get(subject_id) if existing_sessions is not None else None
     if subj_sessions:
         return subj_sessions[0]
+    if existing_sessions is None:
+        if conn is None:
+            existing_sessions = {}
+        else:
+            rows = conn.execute(text("SELECT subject_id, session_id FROM sessions WHERE subject_id = :sid"), {"sid": subject_id})
+            existing_sessions = {subject_id: [row.session_id for row in rows]}
     if existing_ids is None:
         if conn is None:
             existing_ids = []
         else:
-            existing_ids = [row.session_id for row in conn.execute(text("SELECT session_id FROM sessions"))]
+            existing_ids = [row.session_id for row in conn.execute(text("SELECT session_id FROM sessions WHERE subject_id = :sid"), {"sid": subject_id})]
     pref = session_prefix(exp_type)
     pat = re.compile(rf"^{re.escape(subject_id)}_ses-{pref}(\d+)$", re.IGNORECASE)
     max_n = 0
@@ -108,4 +114,3 @@ def load_table(csv_path: str) -> pd.DataFrame:
     df = df.dropna(axis=1, how="all")
     df.columns = df.columns.str.strip()
     return df
-

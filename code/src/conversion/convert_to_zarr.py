@@ -8,12 +8,11 @@ from skimage.io import imread
 from ome_zarr.io import parse_url
 from ome_zarr.writer import write_image
 
-# Attempt to import the map
-# This handles the import whether you run from root or src/
+# Attempt to import the map (works when run from project root)
 try:
-    from config_map import SUBJECT_MAP
+    from code.src.conversion.config_map import SUBJECT_MAP
 except ImportError:
-    sys.path.append(os.path.join(os.getcwd(), 'src', 'conversion'))
+    sys.path.append(os.path.join(os.getcwd(), 'code', 'src', 'conversion'))
     from config_map import SUBJECT_MAP
 
 # --- PATH CONFIGURATION ---
@@ -59,12 +58,12 @@ def convert_subject(folder_name, metadata):
     print(f"  Found {len(files)} slices. Range: {files[0]} ... {files[-1]}")
 
     # 2. DEFINE OUTPUT & CLEAN UP
-    # Structure: raw_bids/sub-XX/ses-XX/micr/
+# Structure: raw_bids/sub-XX/ses-XX/micr/
     output_dir = os.path.join(
         BIDS_ROOT, 
         metadata['subject'], 
         metadata['session'], 
-        'microscopy'
+        'micr'
     )
     
     # AUTO-CLEAN: If this folder exists from a failed run, delete it first.
@@ -122,7 +121,8 @@ def convert_subject(folder_name, metadata):
         volume[i, y_off:y_off+h, x_off:x_off+w] = img
 
     # 6. Write to OME-Zarr
-    zarr_filename = f"{metadata['subject']}_{metadata['session']}_sample-brain_stain-native_run-01_omero.zarr"
+    sample_label = "sample-01"
+    zarr_filename = f"{metadata['subject']}_{metadata['session']}_{sample_label}_run-01_hemi-B_micr.ome.zarr"
     store_path = os.path.join(output_dir, zarr_filename)
 
     print(f"  Writing OME-Zarr to {store_path}...")

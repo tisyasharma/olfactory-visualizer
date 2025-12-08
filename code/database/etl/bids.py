@@ -6,7 +6,7 @@ import re
 import pandas as pd
 from sqlalchemy import text, types as satypes
 from .paths import BIDS_ROOT
-from .utils import file_sha256, detect_hemisphere, get_or_create_session_id
+from .utils import file_sha256, detect_hemisphere
 
 
 def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, allowed_subjects: set | None = None):
@@ -20,13 +20,6 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
             for row in conn.execute(text("SELECT sha256 FROM microscopy_files WHERE sha256 IS NOT NULL")):
                 existing_hashes.add(row.sha256)
 
-    existing_sessions = {}
-    existing_session_ids = []
-    with engine.connect() as conn:
-        for row in conn.execute(text("SELECT subject_id, session_id FROM sessions")):
-            existing_sessions.setdefault(row.subject_id, []).append(row.session_id)
-            existing_session_ids.append(row.session_id)
-
     records = []
     # Accept any microscopy Zarr (common suffixes: .ome.zarr, _omero.zarr)
     for zarr in BIDS_ROOT.rglob("*.zarr"):
@@ -34,6 +27,9 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
         if len(parts) < 4:
             continue
         subject_id = parts[0]
+        if not re.match(r"^sub-[A-Za-z0-9]+$", subject_id):
+            stats["microscopy_skipped_bad_subject_label"] = stats.get("microscopy_skipped_bad_subject_label", 0) + 1
+            continue
         if allowed_subjects is not None and subject_id not in allowed_subjects:
             stats["microscopy_skipped_unknown_subject"] = stats.get("microscopy_skipped_unknown_subject", 0) + 1
             continue
@@ -42,22 +38,34 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
             stats["microscopy_skipped_bad_session_label"] = stats.get("microscopy_skipped_bad_session_label", 0) + 1
             print(f"   ⚠️ Skipping {zarr}: invalid session label '{session_label}' (expected ses-XX).")
             continue
+        datatype = parts[2]
+        if datatype != "micr":
+            continue
+        filename = parts[-1]
         exp_type = "rabies" if "rab" in subject_id else "double_injection"
         modality = "micr"
-        session_id = get_or_create_session_id(
-            None,
-            subject_id,
-            exp_type,
-            existing_sessions=existing_sessions,
-            existing_ids=existing_session_ids,
-        )
+        session_id = f"{subject_id}_{session_label}"
         run = None
-        hemisphere = detect_hemisphere(zarr.parent.as_posix(), zarr.name)
-        if "run-" in zarr.name:
+        m_run = re.search(r"_run-([0-9]+)", filename)
+        if m_run:
             try:
-                run = int(zarr.name.split("run-")[1].split("_")[0])
+                run = int(m_run.group(1))
             except Exception:
                 run = None
+        # sample is required in microscopy BIDS, but we treat it as metadata here
+        # and focus on subject/session/run/hemisphere for DB registration.
+        hemisphere = None
+        m_hemi = re.search(r"_hemi-([A-Za-z])", filename)
+        if m_hemi:
+            hv = m_hemi.group(1).lower()
+            if hv == "l":
+                hemisphere = "left"
+            elif hv == "r":
+                hemisphere = "right"
+            elif hv == "b":
+                hemisphere = "bilateral"
+        if hemisphere is None:
+            hemisphere = detect_hemisphere(zarr.parent.as_posix(), filename)
         sha = file_sha256(zarr)
         if sha in existing_hashes:
             stats["microscopy_skipped_dupe"] = stats.get("microscopy_skipped_dupe", 0) + 1

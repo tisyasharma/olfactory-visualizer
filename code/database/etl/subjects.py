@@ -34,9 +34,8 @@ def seed_subjects_and_sessions(conn, stats: dict):
         subj = meta["subject"]
         if subj in existing_subj_with_session:
             continue
-        exp_type = "rabies" if "Rabies" in original_id else "double_injection"
-        pref = session_prefix(exp_type)
-        sess_rows.append({"session_id": f"{subj}_ses-{pref}01", "subject_id": subj, "modality": "micr"})
+        session_label = meta.get("session", "ses-01")
+        sess_rows.append({"session_id": f"{subj}_{session_label}", "subject_id": subj, "modality": "micr"})
     if sess_rows:
         df = pd.DataFrame(sess_rows)
         stage = "_sessions_seed_stage"

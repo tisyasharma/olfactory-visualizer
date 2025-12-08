@@ -64,7 +64,7 @@ def test_bids_scan_picks_up_omero_zarr(tmp_path, monkeypatch):
     allowed = {"sub-foo"}
 
     # Fake BIDS layout with omero.zarr
-    zarr_dir = tmp_path / "sub-foo" / "ses-01" / "micr" / "sub-foo_ses-01_sample-brain_stain-native_run-01_omero.zarr"
+    zarr_dir = tmp_path / "sub-foo" / "ses-01" / "micr" / "sub-foo_ses-01_sample-01_run-01_hemi-B_micr.ome.zarr"
     (zarr_dir / "0").mkdir(parents=True)
     (zarr_dir / "0" / "dummy.txt").write_text("x")
 
@@ -107,7 +107,7 @@ def test_seed_and_bids_smoke(tmp_path, monkeypatch):
         base_session_count = conn.execute(text("SELECT COUNT(*) FROM sessions")).scalar_one()
 
     # Create a single zarr for a known subject
-    zarr_dir = tmp_path / "sub-rab01" / "ses-01" / "micr" / "sub-rab01_ses-01_sample-brain_stain-native_run-01_omero.zarr"
+    zarr_dir = tmp_path / "sub-rab01" / "ses-01" / "micr" / "sub-rab01_ses-01_sample-01_run-01_hemi-B_micr.ome.zarr"
     (zarr_dir / "0").mkdir(parents=True)
     (zarr_dir / "0" / "dummy.txt").write_text("x")
     monkeypatch.setattr(bids, "BIDS_ROOT", tmp_path)
@@ -123,5 +123,5 @@ def test_seed_and_bids_smoke(tmp_path, monkeypatch):
         sess_count = conn.execute(text("SELECT COUNT(*) FROM sessions")).scalar_one()
         file_count = conn.execute(text("SELECT COUNT(*) FROM microscopy_files")).scalar_one()
 
-    assert sess_count == base_session_count + 1
+    assert sess_count == base_session_count
     assert file_count == 1

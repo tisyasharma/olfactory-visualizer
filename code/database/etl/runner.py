@@ -21,6 +21,7 @@ def run_etl():
         "microscopy_skipped_dupe": 0,
         "counts_ingested_rows": 0,
         "counts_skipped_dupe_files": 0,
+        "counts_skipped_missing_file": 0,
     }
 
     print(f"\n🚀 Starting ETL Pipeline...")

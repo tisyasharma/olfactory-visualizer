@@ -1,7 +1,7 @@
 """
 Helper to ingest uploaded microscopy images:
 - Converts PNG/JPG/TIFF (and other imageio-readable formats) to OME-Zarr.
-- Writes into BIDS-style layout under data/raw_bids/sub-*/ses-*/micr/.
+- Writes into Microscopy-BIDS layout under data/raw_bids/sub-*/ses-*/micr/.
 - Registers sessions and microscopy_files in the database with SHA256 hashes.
 
 Usage (example):
@@ -87,15 +87,16 @@ def write_omezarr(data: np.ndarray, dest: Path, pixel_size_um: float) -> None:
         coordinate_transformations=[[{"type": "scale", "scale": [1.0, ps_m, ps_m]}]],
     )
 
-def write_sidecar(dest: Path, subject: str, session: str, run: int, hemisphere: str, experiment_type: str, pixel_size_um: float):
+def write_sidecar(dest: Path, subject: str, session: str, run: int, hemisphere: str, experiment_type: str, pixel_size_um: float, sample: str):
     sidecar = dest.with_suffix(dest.suffix + ".json")
     meta = {
         "BIDSVersion": "1.8.0",
-        "Modality": "microscopy",
+        "Modality": "micr",
         "Subject": subject,
         "Session": session,
         "Run": run,
         "Hemisphere": hemisphere,
+        "Sample": sample,
         "ExperimentType": experiment_type,
         "PixelSizeMicrons": pixel_size_um,
         "GeneratedAt": datetime.utcnow().isoformat() + "Z",
@@ -112,6 +113,8 @@ def ensure_dataset_files():
             "BIDSVersion": "1.8.0",
             "DatasetType": "raw",
             "GeneratedBy": [{"Name": "ingest_upload.py", "Version": "0.1"}],
+            "Authors": ["Olfactory Data Visualizer"],
+            "License": "CC-BY-4.0"
         }, indent=2))
 
 def validate_outputs(dest: Path):
@@ -127,6 +130,18 @@ def validate_outputs(dest: Path):
 def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel_size_um: float = 1.0, experiment_type: str = "double_injection"):
     engine = get_engine()
     inserted = []
+    sample_label = "sample-01"
+    session_label = session.split("_", 1)[1] if session and "_" in session else session
+    hemi_entity = "hemi-B"
+    hemi_label = hemisphere or "bilateral"
+    if hemi_label.lower() == "left":
+        hemi_entity = "hemi-L"
+        hemi_label = "left"
+    elif hemi_label.lower() == "right":
+        hemi_entity = "hemi-R"
+        hemi_label = "right"
+    else:
+        hemi_label = "bilateral"
     with engine.begin() as conn:
         # ensure subject exists (generic placeholder if new)
         conn.execute(
@@ -152,14 +167,14 @@ def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel
                 raise FileNotFoundError(f"Input file not found: {src}")
             data = load_image(src)
             ensure_dataset_files()
-            dest = BIDS_ROOT / subject / session / "microscopy" / f"{subject}_{session}_run-{idx:02d}_micr.ome.zarr"
+            dest = BIDS_ROOT / subject / session_label / "micr" / f"{subject}_{session_label}_{sample_label}_run-{idx:02d}_{hemi_entity}_micr.ome.zarr"
             # Clean up any stale store from prior attempts so the writer can proceed
             if dest.exists():
                 shutil.rmtree(dest, ignore_errors=True)
                 sidecar_stale = dest.with_suffix(dest.suffix + ".json")
                 sidecar_stale.unlink(missing_ok=True)
             write_omezarr(data, dest, pixel_size_um)
-            write_sidecar(dest, subject, session, idx, hemisphere, experiment_type, pixel_size_um)
+            write_sidecar(dest, subject, session_label, idx, hemi_label, experiment_type, pixel_size_um, sample_label)
             validate_outputs(dest)
             sha = file_sha256(dest)
             # reject duplicate content
