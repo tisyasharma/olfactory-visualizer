@@ -172,6 +172,21 @@ def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel
                 shutil.rmtree(dest, ignore_errors=True)
                 sidecar = dest.with_suffix(dest.suffix + ".json")
                 sidecar.unlink(missing_ok=True)
+                existing = conn.execute(
+                    text("""
+                        SELECT s.subject_id, mf.session_id, mf.run
+                        FROM microscopy_files mf
+                        JOIN sessions s ON mf.session_id = s.session_id
+                        WHERE mf.sha256 = :sha
+                        LIMIT 1
+                    """),
+                    {"sha": sha},
+                ).first()
+                if existing:
+                    raise ValueError(
+                        f"Duplicate microscopy content detected (already stored for subject {existing.subject_id}, "
+                        f"session {existing.session_id}, run {existing.run})"
+                    )
                 raise ValueError(f"Duplicate microscopy content detected (sha256 already exists) for {src.name}")
 
             # register file

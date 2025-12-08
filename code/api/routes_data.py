@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from code.api.deps import fetch_all
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1", tags=["data"])
 
 
 class Subject(BaseModel):

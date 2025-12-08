@@ -8,7 +8,7 @@ from typing import Optional
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
-router = APIRouter()
+router = APIRouter(prefix="/api/v1", tags=["scrna"])
 
 RNA_DIR = Path(__file__).resolve().parents[2] / "data" / "RNAseq_data"
 _clusters_df = None

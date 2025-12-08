@@ -19,8 +19,24 @@ from code.api.deps import (
     clean_numeric,
 )
 from code.database.ingest_upload import ingest
+from sqlalchemy.exc import OperationalError
 
-router = APIRouter()
+
+def next_subject_id(engine, experiment_type: str) -> str:
+    pref = "rab" if experiment_type == "rabies" else "dbl"
+    pat = f"sub-{pref}"
+    max_n = 0
+    with engine.connect() as conn:
+        for row in conn.execute(text("SELECT subject_id FROM subjects WHERE subject_id ILIKE :patt"), {"patt": f"{pat}%" }):
+            sid = row[0] or ""
+            try:
+                n = int(sid.split(f"sub-{pref}")[-1])
+                max_n = max(max_n, n)
+            except Exception:
+                continue
+    return f"sub-{pref}{max_n+1:02d}"
+
+router = APIRouter(prefix="/api/v1", tags=["uploads"])
 
 
 def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, hemisphere: str, experiment_type: str) -> int:
@@ -133,13 +149,14 @@ def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, 
     return inserted or 0
 
 
-@router.post("/upload/microscopy")
-async def upload_microscopy(
-    subject_id: str = Form(..., description="BIDS subject id (e.g., sub-DBL_A)"),
-    session_id: str = Form(..., description="BIDS session id (e.g., ses-dbl or 'auto')"),
+@router.post("/microscopy-files", status_code=201)
+async def create_microscopy_files(
+    subject_id: Optional[str] = Form(None, description="Optional subject id; auto-assigned if omitted."),
+    session_id: str = Form("auto", description="BIDS session id (e.g., ses-dbl or 'auto')"),
     hemisphere: str = Form("bilateral", regex="^(left|right|bilateral)$"),
     pixel_size_um: float = Form(1.0),
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
+    comments: Optional[str] = Form(None, description="Optional notes/comments for this upload"),
     files: List[UploadFile] = File(...),
 ):
     """
@@ -153,6 +170,20 @@ async def upload_microscopy(
     saved_paths: List[Path] = []
     try:
         engine = get_engine()
+        # Decide subject_id (auto if not provided)
+        with engine.connect() as conn:
+            existing_subjects = [r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))]
+        if subject_id:
+            if subject_id in existing_subjects:
+                taken = ", ".join(existing_subjects[:10])
+                more = "" if len(existing_subjects) <= 10 else f" (+{len(existing_subjects)-10} more)"
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Subject ID '{subject_id}' already exists. Taken IDs: {taken}{more}. Please choose a new ID.",
+                )
+        else:
+            subject_id = next_subject_id(engine, experiment_type)
+
         session_id = resolve_session_id(engine, subject_id, experiment_type, session_id)
         # prevent duplicate experiment loads
         with engine.connect() as conn:
@@ -191,18 +222,30 @@ async def upload_microscopy(
                 pixel_size_um=pixel_size_um,
                 experiment_type=experiment_type,
             )
+            if comments:
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("UPDATE sessions SET notes = :n WHERE session_id = :sid"),
+                        {"n": comments, "sid": session_id},
+                    )
         except HTTPException:
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Microscopy ingest failed: {e}")
-        return {"status": "ok", "ingested": [str(p) for p in ingested], "files_processed": [p.name for p in all_images]}
+        return {
+            "status": "ok",
+            "subject_id": subject_id,
+            "session_id": session_id,
+            "ingested": [str(p) for p in ingested],
+            "files_processed": [p.name for p in all_images],
+        }
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-@router.post("/upload/region-counts")
-async def upload_region_counts(
-    subject_id: str = Form(..., description="BIDS subject id (e.g., sub-DBL_A)"),
+@router.post("/region-counts", status_code=201)
+async def create_region_counts(
+    subject_id: str = Form(..., description="BIDS subject id (auto-assigned if omitted upstream)"),
     session_id: Optional[str] = Form(None, description="BIDS session id (e.g., ses-dbl)"),
     hemisphere: str = Form("auto", regex="^(left|right|bilateral|auto)$"),
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
@@ -214,6 +257,16 @@ async def upload_region_counts(
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     engine = get_engine()
+    # Block re-use of an existing subject_id to avoid duplicates
+    with engine.connect() as conn:
+        existing_subjects = [r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))]
+        if subject_id in existing_subjects:
+            taken = ", ".join(existing_subjects[:10])
+            more = "" if len(existing_subjects) <= 10 else f" (+{len(existing_subjects)-10} more)"
+            raise HTTPException(
+                status_code=409,
+                detail=f"Subject ID '{subject_id}' already exists. Taken IDs: {taken}{more}. Please choose a new ID.",
+            )
     sess = resolve_session_id(engine, subject_id, experiment_type, session_id)
 
     tmpdir = Path(tempfile.mkdtemp())

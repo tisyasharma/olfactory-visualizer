@@ -149,7 +149,7 @@
 
 <!-- Upload (full system) -->
 <section id="upload" class="section">
-  <div class="container" data-aos="fade-up">
+  <div class="container container--wide" data-aos="fade-up">
     <div class="section__head">
       <div>
         <p class="kicker">Uploads</p>
@@ -157,34 +157,57 @@
       </div>
     </div>
     <div class="card upload-card">
-      <div class="upload-grid">
-        <label>Modality
-          <select id="uploadModality">
-            <option value="" disabled selected>Select modality</option>
-            <option value="rabies">Rabies Injection</option>
-            <option value="double_injection">Double Injection</option>
-            <!-- <option value="regional_aon">Subregional Injection</option> -->
-            <option value="scrnaseq">RNA Sequencing Data</option>
-          </select>
-        </label>
-        <label>Mouse ID
-          <input id="uploadMouse" type="text" placeholder="e.g., A / B / C ..." />
-        </label>
-        <label>Date Run
-          <input id="uploadDate" type="date" />
-        </label>
-        <label>Protocol
-          <input id="uploadProtocol" type="text" placeholder="name vX.Y (optional)" />
-        </label>
-      </div>
+      <div class="upload-row">
+        <div class="upload-grid upload-grid--stack">
+          <label>Modality
+            <select id="uploadModality">
+              <option value="" disabled selected>Select modality</option>
+              <option value="rabies">Rabies Injection</option>
+              <option value="double_injection">Double Injection</option>
+              <!-- <option value="regional_aon">Subregional Injection</option> -->
+              <option value="scrnaseq">RNA Sequencing Data</option>
+            </select>
+          </label>
+          <label>Date Run
+            <input id="uploadDate" type="date" />
+          </label>
+          <label>Comments (optional)
+            <input id="uploadComment" type="text" placeholder="Notes for this upload" />
+          </label>
+          <div class="upload-actions">
+            <button id="registerBtn" class="btn">Register Experiment</button>
+            <button id="clearBtn" class="btn">Clear</button>
+          </div>
+        </div>
 
-      <div class="uploader" id="dropzone" aria-label="File dropzone">
-        <input id="fileInput" type="file" multiple aria-label="Upload files" />
-        <div class="uploader__icon">⬆</div>
-        <div class="uploader__text">
-          <strong>Drag & drop</strong> image slices here.<br/>
-          Use the buttons below to add images and each hemisphere CSV.
-          <div class="uploader__hint">PNG/JPG/TIFF slices — one mouse/session per upload</div>
+        <div class="uploader uploader--compact" id="dropzone" aria-label="File dropzone">
+          <input id="fileInput" type="file" multiple aria-label="Upload files" />
+          <div class="uploader__body">
+            <div class="uploader__icon">⬆</div>
+            <div class="uploader__text">
+              <strong>Drag & drop</strong>
+              <div>Image slices here.</div>
+              <div>Use the buttons below to add images and each hemisphere CSV.</div>
+              <div class="uploader__hint">PNG/JPG/TIFF slices — one mouse/session per upload</div>
+            </div>
+          </div>
+          <div class="uploader__actions">
+            <div class="counts-upload counts-upload--inline">
+              <div class="counts-upload__head">
+                <span class="file-list__title">Quantification CSVs (upload together — bilateral, ipsilateral, contralateral)</span>
+              </div>
+              <div class="counts-upload__controls">
+                <button class="btn btn--mini" id="addImagesBtn">Add Images</button>
+                <button class="btn btn--mini" id="addCsvBilateral">Add Bilateral CSV</button>
+                <button class="btn btn--mini" id="addCsvLeft">Add Ipsilateral CSV</button>
+                <button class="btn btn--mini" id="addCsvRight">Add Contralateral CSV</button>
+                <input id="csvInputBilateral" type="file" accept=".csv" hidden />
+                <input id="csvInputLeft" type="file" accept=".csv" hidden />
+                <input id="csvInputRight" type="file" accept=".csv" hidden />
+              </div>
+              <div id="csvList" class="file-list"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -192,27 +215,6 @@
         <summary class="file-list__summary">Image files</summary>
         <div id="imageList" class="file-list__body"></div>
       </details>
-
-      <div class="counts-upload">
-        <div class="counts-upload__head">
-          <span class="file-list__title">Quantification CSVs (upload together — bilateral, ipsilateral, contralateral)</span>
-        </div>
-        <div class="counts-upload__controls">
-          <button class="btn btn--mini" id="addImagesBtn">Add Images</button>
-          <button class="btn btn--mini" id="addCsvBilateral">Add Bilateral CSV</button>
-          <button class="btn btn--mini" id="addCsvLeft">Add Ipsilateral CSV</button>
-          <button class="btn btn--mini" id="addCsvRight">Add Contralateral CSV</button>
-          <input id="csvInputBilateral" type="file" accept=".csv" hidden />
-          <input id="csvInputLeft" type="file" accept=".csv" hidden />
-          <input id="csvInputRight" type="file" accept=".csv" hidden />
-        </div>
-        <div id="csvList" class="file-list"></div>
-      </div>
-
-      <div class="actions">
-        <button id="registerBtn" class="btn">Register Experiment</button>
-        <button id="clearBtn" class="btn">Clear</button>
-      </div>
       <div id="uploadSpinner" class="spinner" hidden>
         <span class="spinner__dot" aria-hidden="true"></span>
         <span class="spinner__label">Uploading…</span>
@@ -227,6 +229,22 @@
           <!-- <li><span>Subegional Injection:</span> counts CSV; subregion tag</li> -->
           <li><span>scRNA-sequencing Data:</span> counts (H5/H5AD/MTX), cell metadata, gene metadata, pipeline config</li>
         </ul>
+      </div>
+
+      <div class="panel" style="margin-top:16px;">
+        <div class="panel__head">
+          <h4 class="muted">Microscopy files</h4>
+        </div>
+        <div class="controls-grid">
+          <label>File
+            <select id="fileSelect"></select>
+          </label>
+        </div>
+        <div id="fileDetails" class="file-details" hidden></div>
+        <div class="actions actions--right">
+          <button id="copyPathBtn" class="btn btn--mini btn--ghost">Copy path</button>
+          <button id="napariBtn" class="btn btn--mini btn--ghost">Open in napari</button>
+        </div>
       </div>
     </div>
   </div>

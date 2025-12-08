@@ -69,7 +69,7 @@ const accent1 = getComputedStyle(document.documentElement).getPropertyValue('--a
 const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim();
 const accent3 = getComputedStyle(document.documentElement).getPropertyValue('--accent3').trim();
 
-const API = 'http://localhost:8000';
+const API = '/api/v1';
 
 function vlTheme(){
   return {
@@ -187,9 +187,8 @@ const clearBtn = document.getElementById('clearBtn');
 const uploadStatus = document.getElementById('uploadStatus');
 const uploadWarning = document.getElementById('uploadWarning');
 const uploadModality = document.getElementById('uploadModality');
-const uploadMouse = document.getElementById('uploadMouse');
+const uploadComment = document.getElementById('uploadComment');
 const uploadDate = document.getElementById('uploadDate');
-const uploadProtocol = document.getElementById('uploadProtocol');
 const imageQueue = [];
 const pendingCsv = [];
 const countsQueues = { bilateral: [], left: [], right: [] };
@@ -351,7 +350,7 @@ function updateValueState(el){
   }
 }
 
-[uploadModality, uploadDate].forEach(el => {
+  [uploadModality, uploadDate].forEach(el => {
   el?.addEventListener('change', () => updateValueState(el));
   updateValueState(el);
 });
@@ -359,10 +358,9 @@ function updateValueState(el){
 registerBtn?.addEventListener('click', async () => {
   hideSpinner();
   const modality = uploadModality?.value;
-  const mouse = (uploadMouse?.value || '').trim();
   const dateVal = (uploadDate?.value || '').trim();
-  if(!modality || !mouse || !dateVal){
-    setWarning('Please choose a modality, provide a Mouse ID, and select a date.');
+  if(!modality || !dateVal){
+    setWarning('Please choose a modality and select a date.');
     return;
   }
   const hasImages = imageQueue.length > 0;
@@ -382,9 +380,7 @@ registerBtn?.addEventListener('click', async () => {
   const hemiVal = lateralitySelect?.value;
   const hemisphere = mapLateralityToApi(!hemiVal ? 'all' : hemiVal);
   const experimentType = modality === 'rabies' ? 'rabies' : 'double_injection';
-  const sessionId = (uploadProtocol?.value && uploadProtocol.value.trim())
-    ? uploadProtocol.value.trim().replace(/\s+/g, '-').toLowerCase()
-    : 'auto';
+  const sessionId = 'auto';
 
   const csvFiles = {
     bilateral: countsQueues.bilateral.slice(),
@@ -393,26 +389,30 @@ registerBtn?.addEventListener('click', async () => {
   };
   const imageFiles = imageQueue.slice();
 
-  const confirmMsg = `You are about to ingest ${imageFiles.length} image(s) and ${totalCsv} CSV file(s) for ${mouse} (${sessionId}). This will write to the database. Continue?`;
+  const confirmMsg = `You are about to ingest ${imageFiles.length} image(s) and ${totalCsv} CSV file(s). An ID will be assigned automatically. This will write to the database. Continue?`;
   if(!window.confirm(confirmMsg)){
     return;
   }
 
   try{
     showSpinner('Uploading…');
+    let assigned = null;
     if(imageFiles.length){
-      await uploadMicroscopy(modality, mouse, sessionId, hemisphere, imageFiles);
+      assigned = await uploadMicroscopy(modality, sessionId, hemisphere, imageFiles, uploadComment?.value || '');
+      if(!assigned || !assigned.subject_id){
+        throw new Error('Microscopy upload did not return an ID');
+      }
     }
     if(csvFiles.bilateral.length){
-      await uploadRegionCounts(experimentType, mouse, sessionId, 'bilateral', csvFiles.bilateral);
+      await uploadRegionCounts(experimentType, assigned?.subject_id, assigned?.session_id, 'bilateral', csvFiles.bilateral);
     }
     if(csvFiles.left.length){
-      await uploadRegionCounts(experimentType, mouse, sessionId, 'left', csvFiles.left);
+      await uploadRegionCounts(experimentType, assigned?.subject_id, assigned?.session_id, 'left', csvFiles.left);
     }
     if(csvFiles.right.length){
-      await uploadRegionCounts(experimentType, mouse, sessionId, 'right', csvFiles.right);
+      await uploadRegionCounts(experimentType, assigned?.subject_id, assigned?.session_id, 'right', csvFiles.right);
     }
-    setStatus(`Uploaded ${imageFiles.length} image(s) and ${totalCsv} CSV(s) for ${mouse} -> ${sessionId}`);
+    setStatus(`Uploaded ${imageFiles.length} image(s) and ${totalCsv} CSV(s) -> ${assigned.subject_id} / ${assigned.session_id}`);
     resetUploadForm();
     loadSubjects();
     loadSamples();
@@ -485,6 +485,18 @@ function updateReadyStates(){
   toggle(addCsvBilateral, countsQueues.bilateral.length > 0);
   toggle(addCsvLeft, countsQueues.left.length > 0);
   toggle(addCsvRight, countsQueues.right.length > 0);
+  const ready =
+    (uploadModality?.value || '').trim() &&
+    (uploadDate?.value || '').trim() &&
+    imageQueue.length > 0 &&
+    pendingCsv.length === 0 &&
+    countsQueues.bilateral.length > 0 &&
+    countsQueues.left.length > 0 &&
+    countsQueues.right.length > 0;
+  if(registerBtn){
+    registerBtn.disabled = !ready;
+    registerBtn.classList.toggle('btn--ready', !!ready);
+  }
 }
 
 function prettyBytes(bytes){
@@ -495,17 +507,16 @@ function prettyBytes(bytes){
   return bytes.toFixed(1) + ' ' + units[u];
 }
 
-async function uploadMicroscopy(modality, mouse, sessionId, hemisphere, files){
+async function uploadMicroscopy(modality, sessionId, hemisphere, files, comment){
   const form = new FormData();
-  const subj = mouse.startsWith('sub-') ? mouse : `sub-${mouse}`;
-  form.append('subject_id', subj);
   form.append('session_id', sessionId || `ses-${modality}`);
   form.append('hemisphere', hemisphere || 'bilateral');
   form.append('pixel_size_um', 0.5);
   form.append('experiment_type', modality === 'rabies' ? 'rabies' : 'double_injection');
+  if(comment){ form.append('comments', comment); }
   files.forEach(f => form.append('files', f, f.name));
 
-  const res = await fetch(`${API}/upload/microscopy`, {
+  const res = await fetch(`${API}/microscopy-files`, {
     method: 'POST',
     body: form
   });
@@ -520,7 +531,7 @@ async function uploadMicroscopy(modality, mouse, sessionId, hemisphere, files){
     throw new Error(msg || 'Upload failed');
   }
   const data = await res.json();
-  setStatus(`Uploaded ${files.length} microscopy file(s) for ${subj} -> ${sessionId}`);
+  setStatus(`Uploaded ${files.length} microscopy file(s) -> ${data.subject_id} / ${data.session_id}`);
   return data;
 }
 
@@ -532,7 +543,7 @@ function resetUploadForm(){
   countsQueues.right.splice(0, countsQueues.right.length);
   renderFileLists();
   updateReadyStates();
-  [uploadModality, uploadMouse, uploadDate, uploadProtocol].forEach(el => {
+  [uploadModality, uploadDate, uploadComment].forEach(el => {
     if(!el) return;
     if(el.tagName === 'SELECT'){ el.selectedIndex = 0; }
     else { el.value = ''; }
@@ -547,10 +558,9 @@ function resetUploadForm(){
   hideSpinner();
 }
 
-async function uploadRegionCounts(experimentType, mouse, sessionId, hemisphere, files){
+async function uploadRegionCounts(experimentType, subjectId, sessionId, hemisphere, files){
   const form = new FormData();
-  const subj = mouse.startsWith('sub-') ? mouse : `sub-${mouse}`;
-  form.append('subject_id', subj);
+  if(subjectId){ form.append('subject_id', subjectId); }
   if(sessionId){ form.append('session_id', sessionId); }
   form.append('hemisphere', hemisphere || 'bilateral');
   form.append('experiment_type', experimentType);
@@ -566,7 +576,7 @@ async function uploadRegionCounts(experimentType, mouse, sessionId, hemisphere, 
     form.append('files', f, fname);
   });
 
-  const res = await fetch(`${API}/upload/region-counts`, {
+  const res = await fetch(`${API}/region-counts`, {
     method: 'POST',
     body: form
   });
@@ -584,7 +594,7 @@ async function uploadRegionCounts(experimentType, mouse, sessionId, hemisphere, 
   if((data.rows_ingested || 0) === 0){
     setWarning('No rows ingested (possible duplicate content).');
   }else{
-    setStatus(`Ingested ${data.rows_ingested || 0} row(s) from ${files.length} CSV(s) for ${subj}`);
+    setStatus(`Ingested ${data.rows_ingested || 0} row(s) from ${files.length} CSV(s)`);
   }
   return data;
 }
@@ -600,10 +610,6 @@ async function loadSubjects(){
     const subjects = await fetchJson(`${API}/subjects`);
     if(mouseSelect){
       mouseSelect.innerHTML = '<option value="all" selected>All</option>' +
-        subjects.map(s => `<option value="${s.subject_id}">${s.subject_id}</option>`).join('');
-    }
-    if(uploadMouse && uploadMouse.tagName === 'SELECT'){
-      uploadMouse.innerHTML = '<option value="" disabled selected>Select mouse</option>' +
         subjects.map(s => `<option value="${s.subject_id}">${s.subject_id}</option>`).join('');
     }
   }catch(err){
@@ -655,6 +661,27 @@ function renderFileDetails(option){
 
 fileSelect?.addEventListener('change', (e) => {
   renderFileDetails(e.target.options[e.target.selectedIndex]);
+});
+
+// Copy path / open in napari
+const copyPathBtn = document.getElementById('copyPathBtn');
+const napariBtn = document.getElementById('napariBtn');
+
+copyPathBtn?.addEventListener('click', () => {
+  const opt = fileSelect?.options[fileSelect.selectedIndex];
+  if(!opt) return;
+  const path = decodeURIComponent(opt.getAttribute('data-path') || '');
+  if(!path) return;
+  navigator.clipboard?.writeText(path).then(() => setStatus(`Copied path: ${path}`));
+});
+
+napariBtn?.addEventListener('click', () => {
+  const opt = fileSelect?.options[fileSelect.selectedIndex];
+  if(!opt) return;
+  const path = decodeURIComponent(opt.getAttribute('data-path') || '');
+  if(!path) return;
+  setStatus(`Open in napari: ${path}`);
+  console.info(`Open in napari: python -c \"import napari; v=napari.Viewer(); v.open('${path}', plugin='napari-ome-zarr'); napari.run()\"`);
 });
 
 scrnaSampleSelect?.addEventListener('change', async () => {
