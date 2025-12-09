@@ -1,4 +1,4 @@
-# src/conversion/config_map.py
+# src/conversion/subject_map.py
 
 # This dictionary maps the RAW folder names to clean BIDS metadata.
 # I have mapped them sequentially.

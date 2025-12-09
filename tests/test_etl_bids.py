@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 
 from code.database.etl import bids, subjects
 from code.database.etl.paths import BIDS_ROOT as ORIGINAL_BIDS_ROOT
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 
 
 def make_mem_engine():

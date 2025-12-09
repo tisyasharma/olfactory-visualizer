@@ -8,7 +8,7 @@ from .paths import DATA_ROOT, BIDS_ROOT, ATLAS_JSON, IMAGES_ROOT
 from . import subjects, bids, atlas, counts
 from .stats import summarize
 from .atlas import load_atlas
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from pathlib import Path
 from .utils import combine_hashes, ensure_batches_table, file_sha256
 

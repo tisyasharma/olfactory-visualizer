@@ -12,7 +12,7 @@ from sqlalchemy import text
 
 from code.api.deps import get_engine, resolve_session_id
 from code.database.ingest_upload import ingest
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from code.api.duplication import check_microscopy_duplicate, register_batch
 from code.api.services import uploads as upload_service
 from code.api.models import MicroscopyFile, DuplicateCheckResponse

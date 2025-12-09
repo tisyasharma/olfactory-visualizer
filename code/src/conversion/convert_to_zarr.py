@@ -10,10 +10,10 @@ from ome_zarr.writer import write_image
 
 # Attempt to import the map (works when run from project root)
 try:
-    from code.src.conversion.config_map import SUBJECT_MAP
+    from code.src.conversion.subject_map import SUBJECT_MAP
 except ImportError:
     sys.path.append(os.path.join(os.getcwd(), 'code', 'src', 'conversion'))
-    from config_map import SUBJECT_MAP
+    from subject_map import SUBJECT_MAP
 
 # --- PATH CONFIGURATION ---
 # Based on your screenshot: 'images' is lowercase
@@ -139,7 +139,7 @@ def main():
     if not os.path.exists(BIDS_ROOT):
         os.makedirs(BIDS_ROOT)
 
-    # Loop through every mouse defined in config_map.py
+    # Loop through every mouse defined in subject_map.py
     for raw_folder, meta in SUBJECT_MAP.items():
         convert_subject(raw_folder, meta)
 

@@ -11,7 +11,7 @@ from code.api.duplication import (
     combine_hex_hashes,
 )
 from code.api.deps import sha256_path
-from code.api.config import ALLOWED_SUBJECT_PREFIXES
+from code.api.settings import ALLOWED_SUBJECT_PREFIXES
 
 logger = logging.getLogger(__name__)
 

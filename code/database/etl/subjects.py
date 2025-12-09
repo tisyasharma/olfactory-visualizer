@@ -1,10 +1,10 @@
 """
 Subject/session seeding stage.
-Reason: seed subjects and one microscopy session per subject from config_map; reusable in pipeline.
+Reason: seed subjects and one microscopy session per subject from subject_map; reusable in pipeline.
 """
 from sqlalchemy import text
 import pandas as pd
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from .paths import BIDS_ROOT
 import re
 from .stats import bump
@@ -107,7 +107,7 @@ def cleanup_unknown_subjects(conn, allowed_subjects: set, stats: dict):
 def cleanup_unknown_subject_dirs(allowed_subjects: set, stats: dict):
     """
     Remove stray subject folders under data/raw_bids that are not in the allowed set.
-    This keeps the on-disk BIDS tree aligned with config_map to prevent sub-A/sub-Z from reappearing.
+    This keeps the on-disk BIDS tree aligned with subject_map to prevent sub-A/sub-Z from reappearing.
     """
     if not BIDS_ROOT.exists():
         return

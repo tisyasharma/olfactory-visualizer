@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from code.database.connect import get_engine
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 
 
 def main():

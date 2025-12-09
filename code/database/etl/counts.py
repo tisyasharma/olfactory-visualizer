@@ -13,7 +13,7 @@ from .utils import (
     load_table,
     file_sha256,
 )
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from .paths import DATA_ROOT
 
 

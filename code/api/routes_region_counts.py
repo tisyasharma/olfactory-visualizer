@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from sqlalchemy import text, types as satypes
 
 from code.api.deps import get_engine, resolve_session_id, sha256_path, load_table, clean_numeric
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from code.api.services import uploads as upload_service
 from code.api.models import RegionCountSummary, DuplicateCheckResponse
 

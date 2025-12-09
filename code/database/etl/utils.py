@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
-from code.src.conversion.config_map import SUBJECT_MAP
+from code.src.conversion.subject_map import SUBJECT_MAP
 from typing import List
 from code.api.duplication import combine_hashes, ensure_batches_table  # reuse shared hashing/table setup
 
@@ -53,7 +53,7 @@ def detect_hemisphere(root: str, filename: str) -> str:
 def get_or_create_session_id(conn, subject_id: str, exp_type: str, existing_sessions: dict | None = None, existing_ids: list[str] | None = None) -> str:
     """
     Return a session_id for a subject. If sessions exist for the subject, reuse the first.
-    Otherwise, use the configured session label from config_map when present, or fall back to 'ses-01'.
+    Otherwise, use the configured session label from subject_map when present, or fall back to 'ses-01'.
     We avoid experiment-type-derived suffixes (e.g., _ses-rab01) to keep BIDS paths consistent:
     sub-XXX/ses-01/... for all subjects.
     Does not insert rows here; caller can insert with ON CONFLICT DO NOTHING. Mutates existing_ids if provided.
