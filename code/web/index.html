@@ -9,8 +9,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" type="image/x-icon" href="/code/web/favicon.ico" />
-  <link rel="shortcut icon" href="/code/web/favicon.ico" />
 
   <!-- AOS Animate on Scroll -->
   <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet" />
@@ -28,10 +26,11 @@
     <div class="nav__inner">
       <a href="#top" class="brand">Olfactory DV</a>
       <div class="nav__links">
-        <a href="#overview">Overview</a>
-        <a href="#datasets">Datasets</a>
-        <a href="#upload">Upload</a>
-        <a href="#methods">Methods</a>
+      <a href="#overview">Overview</a>
+      <a href="#datasets">Datasets</a>
+      <a href="#upload">Upload</a>
+      <a href="#viewer">Napari Viewer</a>
+      <a href="#methods">Methods</a>
       </div>    </div>
   </nav>
 
@@ -176,7 +175,7 @@
           </label>
           <div class="upload-actions">
             <button id="registerBtn" class="btn">Register Experiment</button>
-            <button id="clearBtn" class="btn">Clear</button>
+            <button id="clearBtn" class="btn btn--clear">Clear</button>
           </div>
         </div>
 
@@ -186,7 +185,7 @@
             <div class="uploader__icon">⬆</div>
             <div class="uploader__text">
               <strong>Drag & drop</strong>
-              <div>Image slices here.</div>
+              <div>OR</div>
               <div>Use the buttons below to add images and each hemisphere CSV.</div>
               <div class="uploader__hint">PNG/JPG/TIFF slices — one mouse/session per upload</div>
             </div>
@@ -224,27 +223,34 @@
       <div class="expected-note">
         <p class="muted small"><strong>Expected files</strong></p>
         <ul class="expected-list">
-          <li><span>Rabies Injection:</span> counts CSV; optional transform JSON; notes</li>
-          <li><span>Double Injection:</span> two counts CSVs (A/B) + labels; optional transform JSON</li>
-          <!-- <li><span>Subegional Injection:</span> counts CSV; subregion tag</li> -->
-          <li><span>scRNA-sequencing Data:</span> counts (H5/H5AD/MTX), cell metadata, gene metadata, pipeline config</li>
+          <li><span>Rabies and Double Injections:</span> microscopy images (PNG/JPG/TIFF) + three QUINT CSVs (bilateral, ipsilateral, contralateral); optional notes.</li>
+          <li><span>scRNA-sequencing Data:</span> counts (H5/H5AD/MTX/H5AD), cell metadata, gene metadata, pipeline config.</li>
         </ul>
       </div>
 
-      <div class="panel" style="margin-top:16px;">
-        <div class="panel__head">
-          <h4 class="muted">Microscopy files</h4>
-        </div>
-        <div class="controls-grid">
-          <label>File
-            <select id="fileSelect"></select>
-          </label>
-        </div>
-        <div id="fileDetails" class="file-details" hidden></div>
-        <div class="actions actions--right">
-          <button id="copyPathBtn" class="btn btn--mini btn--ghost">Copy path</button>
-          <button id="napariBtn" class="btn btn--mini btn--ghost">Open in napari</button>
-        </div>
+    </div>
+  </div>
+</section>
+
+<!-- Viewer -->
+<section id="viewer" class="section section--alt">
+  <div class="container" data-aos="fade-up">
+    <div class="section__head">
+      <div>
+        <p class="kicker">Napari Viewer</p>
+        <h3>Microscopy files</h3>
+      </div>
+    </div>
+    <div class="card upload-card">
+      <div class="controls-grid">
+        <label>File
+          <select id="fileSelect"></select>
+        </label>
+      </div>
+      <div id="fileDetails" class="file-details" hidden></div>
+      <div class="actions actions--right">
+        <button id="copyPathBtn" class="btn btn--mini btn--ghost">Copy path</button>
+        <button id="napariBtn" class="btn btn--mini btn--ghost">Open in Napari</button>
       </div>
     </div>
   </div>

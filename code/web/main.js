@@ -439,6 +439,7 @@ function setStatus(msg){
     uploadWarning.hidden = true;
     uploadWarning.textContent = '';
     uploadWarning.classList.remove('note--error');
+    uploadWarning.style.display = 'none';
   }
 }
 function setWarning(msg){
@@ -447,6 +448,7 @@ function setWarning(msg){
       uploadWarning.hidden = true;
       uploadWarning.textContent = '';
       uploadWarning.classList.remove('note--error');
+      uploadWarning.style.display = 'none';
     }
     return;
   }
