@@ -153,6 +153,7 @@
       <div>
         <p class="kicker">Uploads</p>
         <h3>Upload Center</h3>
+        <p id="uploadGuidance" class="upload-hint">To enable Register: Select a modality | Choose a date | Add microscopy images | Add bilateral CSV | Add ipsilateral CSV | Add contralateral CSV</p>
       </div>
     </div>
     <div class="card upload-card">
@@ -177,6 +178,7 @@
             <button id="registerBtn" class="btn">Register Experiment</button>
             <button id="clearBtn" class="btn btn--clear">Clear</button>
           </div>
+          <div id="dupNotice" class="note note--error" hidden></div>
         </div>
 
         <div class="uploader uploader--compact" id="dropzone" aria-label="File dropzone">

@@ -2,13 +2,14 @@
 ETL utilities.
 Reason: reusable helpers (hashing, CSV load, hemisphere detection, session id allocation).
 """
-import hashlib
 import os
 import re
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 from code.src.conversion.config_map import SUBJECT_MAP
+from typing import List
+from code.api.duplication import combine_hashes, ensure_batches_table  # reuse shared hashing/table setup
 
 
 def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:

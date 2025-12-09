@@ -4,7 +4,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from code.api.routes_data import router as data_router
-from code.api.routes_uploads import router as upload_router
+from code.api.routes_microscopy import router as microscopy_router
+from code.api.routes_region_counts import router as region_counts_router
 from code.api.scrna import router as scrna_router
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
@@ -21,5 +22,6 @@ def root():
 
 # Wire routers
 app.include_router(data_router)
-app.include_router(upload_router)
+app.include_router(microscopy_router)
+app.include_router(region_counts_router)
 app.include_router(scrna_router)

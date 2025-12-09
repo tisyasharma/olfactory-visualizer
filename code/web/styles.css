@@ -280,6 +280,13 @@ h2,h3,h4{ margin:6px 0 }
   display:inline-flex; align-items:center; padding:4px 8px; border-radius:999px; background:var(--paper-alt); color:#475569; font-size:12px; border:1px solid var(--border);
 }
 .pill--muted{ background:#f8fafc; color:#94a3b8 }
+.upload-hint{
+  margin-top:6px;
+  font-size:13px;
+  color:#6b7280;
+  line-height:1.4;
+}
+.upload-hint strong{ color:#334155; }
 .upload-card{ padding:24px; margin-top:12px; }
 .upload-row{
   display:grid;

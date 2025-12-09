@@ -186,6 +186,8 @@ const registerBtn = document.getElementById('registerBtn');
 const clearBtn = document.getElementById('clearBtn');
 const uploadStatus = document.getElementById('uploadStatus');
 const uploadWarning = document.getElementById('uploadWarning');
+const uploadGuidance = document.getElementById('uploadGuidance');
+const dupNotice = document.getElementById('dupNotice');
 const uploadModality = document.getElementById('uploadModality');
 const uploadComment = document.getElementById('uploadComment');
 const uploadDate = document.getElementById('uploadDate');
@@ -194,6 +196,14 @@ const pendingCsv = [];
 const countsQueues = { bilateral: [], left: [], right: [] };
 const IMAGE_EXT = ['.png','.jpg','.jpeg','.tif','.tiff','.ome.tif','.ome.tiff','.zarr','.ome.zarr'];
 const CSV_EXT = ['.csv'];
+let duplicateState = { duplicate:false, message:'' };
+let dupCheckController = null;
+let dupCheckPending = false;
+async function hashFile(file){
+  const buf = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
 const addImagesBtn = document.getElementById('addImagesBtn');
 const addCsvBilateral = document.getElementById('addCsvBilateral');
 const addCsvLeft = document.getElementById('addCsvLeft');
@@ -234,6 +244,10 @@ files.forEach(f => {
   const name = (f.name || '').toLowerCase();
   const isCsv = CSV_EXT.some(ext => name.endsWith(ext));
   const isImage = IMAGE_EXT.some(ext => name.endsWith(ext));
+  if(f.size === 0){
+    rejected.push(`${f.name || 'unknown'} (0 bytes — download locally first)`);
+    return;
+  }
   if(target === 'image' && !isImage){
     rejected.push(f.name || 'unknown');
     return;
@@ -259,6 +273,7 @@ files.forEach(f => {
   });
   renderFileLists();
   updateReadyStates();
+  checkDuplicatePreflight();
   if(rejected.length){
     setWarning(`Rejected unsupported file types: ${rejected.join(', ')}`);
   }else{
@@ -317,6 +332,7 @@ document.addEventListener('click', (e) => {
         countsQueues[val].push(f);
         renderFileLists();
         updateReadyStates();
+        checkDuplicatePreflight();
       }
     }
     return;
@@ -335,6 +351,7 @@ document.addEventListener('click', (e) => {
   }
   renderFileLists();
   updateReadyStates();
+  checkDuplicatePreflight();
 });
 
 clearBtn?.addEventListener('click', () => {
@@ -360,24 +377,30 @@ function updateValueState(el){
 
 registerBtn?.addEventListener('click', async () => {
   hideSpinner();
+  // Always re-run dup check before submit
+  await checkDuplicatePreflight({ force: true });
+  if(duplicateState.duplicate){
+    setGuidance(duplicateState.message || 'Duplicate upload detected; please use new files.');
+    return;
+  }
   const modality = uploadModality?.value;
   const dateVal = (uploadDate?.value || '').trim();
   if(!modality || !dateVal){
-    setWarning('Please choose a modality and select a date.');
+    setGuidance('Please choose a modality and select a date.');
     return;
   }
   const hasImages = imageQueue.length > 0;
   const totalCsv = countsQueues.bilateral.length + countsQueues.left.length + countsQueues.right.length;
   if(pendingCsv.length > 0){
-    setWarning('Assign all quantification CSVs to bilateral/ipsilateral/contralateral before submitting.');
+    setGuidance('Assign all quantification CSVs to bilateral/ipsilateral/contralateral before submitting.');
     return;
   }
   if(!hasImages){
-    setWarning('Please add microscopy images before submitting.');
+    setGuidance('Please add microscopy images before submitting.');
     return;
   }
   if(countsQueues.bilateral.length === 0 || countsQueues.left.length === 0 || countsQueues.right.length === 0){
-    setWarning('Add all three quantification files: bilateral, ipsilateral, and contralateral.');
+    setGuidance('Add all three quantification files: bilateral, ipsilateral, and contralateral.');
     return;
   }
   const hemiVal = lateralitySelect?.value;
@@ -445,6 +468,20 @@ function setStatus(msg){
     uploadWarning.style.display = 'none';
   }
 }
+function setGuidance(msg){
+  if(!uploadGuidance) return;
+  uploadGuidance.textContent = msg || '';
+}
+function setDupNotice(msg){
+  if(!dupNotice) return;
+  if(!msg){
+    dupNotice.hidden = true;
+    dupNotice.textContent = '';
+    return;
+  }
+  dupNotice.hidden = false;
+  dupNotice.textContent = msg;
+}
 function setWarning(msg){
   if(!msg){
     if(uploadWarning){
@@ -490,6 +527,18 @@ function updateReadyStates(){
   toggle(addCsvBilateral, countsQueues.bilateral.length > 0);
   toggle(addCsvLeft, countsQueues.left.length > 0);
   toggle(addCsvRight, countsQueues.right.length > 0);
+  if(dupCheckPending){
+    if(registerBtn){ registerBtn.disabled = true; registerBtn.classList.remove('btn--ready'); }
+    setGuidance('Checking duplicates…');
+    setDupNotice('');
+    return;
+  }
+  if(duplicateState.duplicate){
+    if(registerBtn){ registerBtn.disabled = true; registerBtn.classList.remove('btn--ready'); }
+    setGuidance(duplicateState.message || 'Duplicate upload detected; please use new files.');
+    setDupNotice(duplicateState.message || 'These files were already ingested.');
+    return;
+  }
   const missing = [];
   if(!(uploadModality?.value || '').trim()){ missing.push('Select a modality'); }
   if(!(uploadDate?.value || '').trim()){ missing.push('Choose a date'); }
@@ -505,9 +554,9 @@ function updateReadyStates(){
   }
   // Surface why the button is disabled
   if(!ready){
-    setWarning(`To enable Register: ${missing.join(' • ')}`);
+    setGuidance(`To enable Register: ${missing.join(' | ')}`);
   }else{
-    setWarning('');
+    setGuidance('Ready to register.');
     setStatus('Ready.');
   }
 }
@@ -554,6 +603,8 @@ function resetUploadForm(){
   countsQueues.bilateral.splice(0, countsQueues.bilateral.length);
   countsQueues.left.splice(0, countsQueues.left.length);
   countsQueues.right.splice(0, countsQueues.right.length);
+  duplicateState = { duplicate:false, message:'' };
+  dupCheckPending = false;
   renderFileLists();
   updateReadyStates();
   [uploadModality, uploadDate, uploadComment].forEach(el => {
@@ -612,6 +663,57 @@ async function uploadRegionCounts(experimentType, subjectId, sessionId, hemisphe
   return data;
 }
 
+// Duplicate preflight check (microscopy + CSV)
+async function checkDuplicatePreflight({ force=false } = {}){
+  // abort previous unless this is a forced check (e.g., on submit)
+  if(!force && dupCheckController){ dupCheckController.abort(); }
+  dupCheckController = new AbortController();
+  const sig = dupCheckController.signal;
+  // reset state for this run
+  duplicateState = { duplicate:false, message:'' };
+  dupCheckPending = true;
+  setGuidance('Checking duplicates…');
+  setDupNotice('');
+  try{
+    // Microscopy check
+    if(imageQueue.length){
+      const hashes = await Promise.all(imageQueue.map(hashFile));
+      const res = await fetch(`${API}/microscopy-files/duplicate-check`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(hashes),
+        signal: sig
+      });
+      if(res.ok){
+        const data = await res.json();
+        if(data.duplicate){
+          duplicateState = { duplicate:true, message: data.message || 'Duplicate microscopy batch detected.' };
+        }
+      }
+    }
+    // CSV check (all assigned + pending)
+    if(!duplicateState.duplicate){
+      const allCsv = [...pendingCsv, ...countsQueues.bilateral, ...countsQueues.left, ...countsQueues.right];
+      if(allCsv.length){
+        const formCsv = new FormData();
+        allCsv.forEach(f => formCsv.append('files', f, f.name));
+        const resCsv = await fetch(`${API}/region-counts/duplicate-check`, { method:'POST', body: formCsv, signal: sig });
+        if(resCsv.ok){
+          const data = await resCsv.json();
+          if(data.duplicate){
+            duplicateState = { duplicate:true, message: data.message || 'Duplicate quantification CSV detected.' };
+          }
+        }
+      }
+    }
+  }catch(err){
+    if(err.name === 'AbortError') return;
+    // ignore other errors; don't block
+  }finally{
+    dupCheckPending = false;
+    updateReadyStates();
+  }
+}
 async function fetchJson(url){
   const res = await fetch(url);
   if(!res.ok) throw new Error(await res.text());

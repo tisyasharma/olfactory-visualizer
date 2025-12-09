@@ -1,44 +1,23 @@
 """
-Upload endpoints for microscopy (OME-Zarr) and quantification CSVs.
-Reason: isolate write paths from read-only routes.
+Quantification CSV upload and duplicate-check endpoints (RESTful).
 """
 from typing import List, Optional
 import tempfile
 import shutil
-from pathlib import Path
 import hashlib
-import pandas as pd
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+import pandas as pd
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from sqlalchemy import text, types as satypes
 
-from code.api.deps import (
-    get_engine,
-    resolve_session_id,
-    sha256_path,
-    load_table,
-    clean_numeric,
-)
-from code.database.ingest_upload import ingest
-from sqlalchemy.exc import OperationalError
+from code.api.deps import get_engine, resolve_session_id, sha256_path, load_table, clean_numeric
 from code.src.conversion.config_map import SUBJECT_MAP
+from code.api.services import uploads as upload_service
+from code.api.models import RegionCountSummary, DuplicateCheckResponse
 
 
-def next_subject_id(engine, experiment_type: str) -> str:
-    pref = "rab" if experiment_type == "rabies" else "dbl"
-    pat = f"sub-{pref}"
-    max_n = 0
-    with engine.connect() as conn:
-        for row in conn.execute(text("SELECT subject_id FROM subjects WHERE subject_id ILIKE :patt"), {"patt": f"{pat}%" }):
-            sid = row[0] or ""
-            try:
-                n = int(sid.split(f"sub-{pref}")[-1])
-                max_n = max(max_n, n)
-            except Exception:
-                continue
-    return f"sub-{pref}{max_n+1:02d}"
-
-router = APIRouter(prefix="/api/v1", tags=["uploads"])
+router = APIRouter(prefix="/api/v1", tags=["region_counts"])
 ALLOWED_SUBJECTS = {meta["subject"] for meta in SUBJECT_MAP.values()}
 
 
@@ -152,133 +131,6 @@ def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, 
     return inserted or 0
 
 
-@router.post("/microscopy-files", status_code=201)
-async def create_microscopy_files(
-    subject_id: Optional[str] = Form(None, description="Optional subject id; auto-assigned if omitted."),
-    session_id: str = Form("auto", description="BIDS session id (e.g., ses-dbl or 'auto')"),
-    hemisphere: str = Form("bilateral", regex="^(left|right|bilateral)$"),
-    pixel_size_um: float = Form(1.0),
-    experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
-    comments: Optional[str] = Form(None, description="Optional notes/comments for this upload"),
-    files: List[UploadFile] = File(...),
-):
-    """
-    Accept microscopy uploads, convert to OME-Zarr, register sessions/files.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="No files provided")
-    image_ext = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".ome.tif", ".ome.tiff", ".zarr", ".ome.zarr")
-
-    tmpdir = Path(tempfile.mkdtemp())
-    saved_paths: List[Path] = []
-    try:
-        engine = get_engine()
-        # Decide subject_id (auto-assign if omitted) but only after ensuring the batch is unique
-        with engine.connect() as conn:
-            existing_subjects = {r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))}
-
-        session_id = resolve_session_id(engine, subject_id, experiment_type, session_id)
-        # prevent duplicate experiment loads
-        with engine.connect() as conn:
-            already = conn.execute(
-                text("SELECT 1 FROM microscopy_files WHERE session_id = :sid LIMIT 1"),
-                {"sid": session_id},
-            ).first()
-            if already:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Session {session_id} already has microscopy files registered. Duplicate ingest blocked.",
-                )
-        # Stage uploads to temp
-        for uf in files:
-            fname = uf.filename or ""
-            lower = fname.lower()
-            if not lower.endswith(image_ext):
-                raise HTTPException(status_code=400, detail=f"Unsupported file type for {fname}. Upload images only.")
-            dest = tmpdir / fname
-            with dest.open("wb") as f:
-                shutil.copyfileobj(uf.file, f)
-            saved_paths.append(dest)
-
-        if not saved_paths:
-            raise HTTPException(status_code=400, detail="No valid image files found in upload.")
-
-        # Stable order so run numbering is deterministic when folder uploads are used
-        all_images = sorted(saved_paths, key=lambda p: p.name)
-        # Combined checksum of raw uploads (pre-conversion) to block identical reuploads
-        h = hashlib.sha256()
-        for p in all_images:
-            h.update(sha256_path(p).encode())
-        raw_batch_checksum = h.hexdigest()
-
-        with engine.connect() as conn:
-            dup_batch = conn.execute(
-                text("SELECT 1 FROM ingest_log WHERE checksum = :c AND status = 'success' AND message LIKE 'microscopy%' LIMIT 1"),
-                {"c": raw_batch_checksum},
-            ).first()
-        if dup_batch:
-            raise HTTPException(
-                status_code=409,
-                detail="These microscopy images were already ingested (checksum match); upload blocked.",
-            )
-
-        # Now assign subject_id if not provided, after confirming uniqueness
-        if subject_id:
-            # Allow any existing subject that matches prefixes (sub-rabXX/sub-dblXX) or config map
-            if subject_id not in existing_subjects and subject_id not in ALLOWED_SUBJECTS:
-                # If it looks malformed, reject
-                if not (subject_id.startswith("sub-rab") or subject_id.startswith("sub-dbl")):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Subject ID '{subject_id}' is not allowed. Use sub-rabXX or sub-dblXX.",
-                    )
-        else:
-            subject_id = next_subject_id(engine, experiment_type)
-
-        try:
-            ingested = ingest(
-                subject=subject_id,
-                session=session_id,
-                hemisphere=hemisphere,
-                files=all_images,
-                pixel_size_um=pixel_size_um,
-                experiment_type=experiment_type,
-            )
-            if comments:
-                with engine.begin() as conn:
-                    conn.execute(
-                        text("UPDATE sessions SET notes = :n WHERE session_id = :sid"),
-                        {"n": comments, "sid": session_id},
-                    )
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Microscopy ingest failed: {e}")
-        # Record successful microscopy batch to prevent re-uploading the same images
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    "INSERT INTO ingest_log (source_path, checksum, status, message) "
-                    "VALUES (:p, :c, :s, :m)"
-                ),
-                {
-                    "p": ";".join(str(p) for p in all_images),
-                    "c": raw_batch_checksum,
-                    "s": "success",
-                    "m": f"microscopy upload {session_id}",
-                },
-            )
-        return {
-            "status": "ok",
-            "subject_id": subject_id,
-            "session_id": session_id,
-            "ingested": [str(p) for p in ingested],
-            "files_processed": [p.name for p in all_images],
-        }
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-
 @router.post("/region-counts", status_code=201)
 async def create_region_counts(
     subject_id: str = Form(..., description="BIDS subject id (auto-assigned if omitted upstream)"),
@@ -293,7 +145,6 @@ async def create_region_counts(
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     engine = get_engine()
-    # Subject must be in allowed set; counts are added to existing subject
     if subject_id not in ALLOWED_SUBJECTS:
         raise HTTPException(
             status_code=400,
@@ -316,7 +167,6 @@ async def create_region_counts(
             saved_hashes[dest] = sha256_path(dest)
 
         with engine.connect() as conn:
-            # Block duplicate ingest for the same session if any region_counts already linked
             dup = conn.execute(
                 text(
                     """
@@ -334,7 +184,6 @@ async def create_region_counts(
                     status_code=409,
                     detail=f"Session {sess} already has quantification rows registered. Duplicate ingest blocked.",
                 )
-            # Block identical file contents if checksum already ingested
             for chk in saved_hashes.values():
                 existing = conn.execute(
                     text("SELECT 1 FROM ingest_log WHERE checksum = :c AND status = 'success' LIMIT 1"),
@@ -348,7 +197,6 @@ async def create_region_counts(
         for path in saved:
             try:
                 rows += ingest_counts_csv(engine, path, subject_id, sess, hemisphere, experiment_type)
-                # log checksum for dedupe
                 chk = saved_hashes.get(path)
                 if chk:
                     with engine.begin() as conn:
@@ -364,3 +212,57 @@ async def create_region_counts(
         return {"status": "ok", "rows_ingested": rows}
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.post("/region-counts/duplicate-check", status_code=200, response_model=DuplicateCheckResponse)
+async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
+    if not files:
+        return {"duplicate": False, "message": "No files provided"}
+    tmpdir = Path(tempfile.mkdtemp())
+    saved_hashes = []
+    try:
+        for uf in files:
+            if not (uf.filename or "").lower().endswith(".csv"):
+                continue
+            dest = tmpdir / (uf.filename or "upload.csv")
+            with dest.open("wb") as f:
+                shutil.copyfileobj(uf.file, f)
+            if dest.stat().st_size == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{uf.filename or 'CSV'} is 0 bytes. If this is a cloud placeholder (e.g., Dropbox online-only), make it available offline first.",
+                )
+            saved_hashes.append(sha256_path(dest))
+        if not saved_hashes:
+            return {"duplicate": False, "message": ""}
+        saved_hashes.sort()
+        h = hashlib.sha256()
+        for s in saved_hashes:
+            h.update(s.encode())
+        batch_checksum = h.hexdigest()
+        engine = get_engine()
+        with engine.connect() as conn:
+            dup = conn.execute(
+                text("SELECT 1 FROM ingest_log WHERE checksum = :chk AND status = 'success' LIMIT 1"),
+                {"chk": batch_checksum},
+            ).first()
+        if dup:
+            return {"duplicate": True, "message": "These files have already been uploaded and exist in the database (green check)"}
+        return {"duplicate": False, "message": ""}
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@router.get("/region-counts", status_code=200, response_model=List[RegionCountSummary])
+async def list_region_counts(limit: int = 100):
+    engine = get_engine()
+    return upload_service.list_region_counts(engine, limit)
+
+
+@router.get("/region-counts/file/{file_id}", status_code=200, response_model=List[RegionCountSummary])
+async def get_region_counts_for_file(file_id: int, limit: int = 1000):
+    engine = get_engine()
+    rows = upload_service.get_region_counts_for_file(engine, file_id, limit)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No region counts found for this file_id")
+    return rows

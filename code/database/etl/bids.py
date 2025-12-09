@@ -219,3 +219,27 @@ def build_file_map(engine):
             if key not in file_map:
                 file_map[key] = r.file_id
     return file_map
+
+
+def backfill_ingest_log(engine, stats: dict):
+    """
+    Ensure existing microscopy_files have a corresponding success row in ingest_log.
+    Reason: allows duplicate detection to work even for files ingested before logging was added.
+    """
+    with engine.begin() as conn:
+        inserted = conn.execute(
+            text(
+                """
+                INSERT INTO ingest_log (source_path, checksum, status, message)
+                SELECT mf.path, mf.sha256, 'success', 'microscopy backfill'
+                FROM microscopy_files mf
+                WHERE mf.sha256 IS NOT NULL
+                  AND NOT EXISTS (
+                        SELECT 1 FROM ingest_log lg
+                        WHERE lg.checksum = mf.sha256 AND lg.status = 'success'
+                  );
+                """
+            )
+        ).rowcount
+        if inserted:
+            stats["ingest_log_backfilled_microscopy"] = stats.get("ingest_log_backfilled_microscopy", 0) + inserted

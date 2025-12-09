@@ -5,7 +5,6 @@ Reason: separate read-only API routes from uploads and main wiring.
 from typing import List, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-
 from code.api.deps import fetch_all
 
 router = APIRouter(prefix="/api/v1", tags=["data"])
