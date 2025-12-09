@@ -17,7 +17,13 @@ def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id
     sid = (session_id or "").strip()
     if sid.lower() == "auto" or sid == "":
         with engine.connect() as conn:
-            sid = get_or_create_session_id(conn, subject_id, experiment_type)
+            return get_or_create_session_id(conn, subject_id, experiment_type)
+    # Normalize to sub-xxx_ses-yy if caller passed a raw session label
+    if not sid.startswith(f"{subject_id}_"):
+        # If they passed just ses-xx, attach subject_id; otherwise fallback to default
+        if sid.startswith("ses-"):
+            return f"{subject_id}_{sid}"
+        return f"{subject_id}_ses-01"
     return sid
 
 

@@ -129,45 +129,20 @@ def validate_outputs(dest: Path):
 
 def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel_size_um: float = 1.0, experiment_type: str = "double_injection"):
     engine = get_engine()
-    inserted = []
+    staged = []
     sample_label = "sample-01"
     session_label = session.split("_", 1)[1] if session and "_" in session else session
-    hemi_entity = "hemi-B"
     hemi_label = hemisphere or "bilateral"
-    if hemi_label.lower() == "left":
-        hemi_entity = "hemi-L"
-        hemi_label = "left"
-    elif hemi_label.lower() == "right":
-        hemi_entity = "hemi-R"
-        hemi_label = "right"
-    else:
+    hemi_label = hemi_label.lower()
+    if hemi_label not in {"left", "right", "bilateral"}:
         hemi_label = "bilateral"
-    with engine.begin() as conn:
-        # ensure subject exists (generic placeholder if new)
-        conn.execute(
-            text("""
-                INSERT INTO subjects (subject_id, original_id, sex, experiment_type, details)
-                VALUES (:subj, :orig, 'U', :exp_type, '')
-                ON CONFLICT (subject_id) DO NOTHING;
-            """),
-            {"subj": subject, "orig": subject, "exp_type": experiment_type},
-        )
-        # ensure session
-        conn.execute(
-            text("""
-                INSERT INTO sessions (session_id, subject_id, modality)
-                VALUES (:sid, :subj, :mod)
-                ON CONFLICT (session_id) DO NOTHING;
-            """),
-            {"sid": session, "subj": subject, "mod": "micr"},
-        )
-
+    try:
+        ensure_dataset_files()
         for idx, src in enumerate(files, start=1):
             if not src.exists():
                 raise FileNotFoundError(f"Input file not found: {src}")
             data = load_image(src)
-            ensure_dataset_files()
-            dest = BIDS_ROOT / subject / session_label / "micr" / f"{subject}_{session_label}_{sample_label}_run-{idx:02d}_{hemi_entity}_micr.ome.zarr"
+            dest = BIDS_ROOT / subject / session_label / "micr" / f"{subject}_{session_label}_{sample_label}_run-{idx:02d}_micr.ome.zarr"
             # Clean up any stale store from prior attempts so the writer can proceed
             if dest.exists():
                 shutil.rmtree(dest, ignore_errors=True)
@@ -177,44 +152,54 @@ def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel
             write_sidecar(dest, subject, session_label, idx, hemi_label, experiment_type, pixel_size_um, sample_label)
             validate_outputs(dest)
             sha = file_sha256(dest)
-            # reject duplicate content
-            dup = conn.execute(
-                text("SELECT 1 FROM microscopy_files WHERE sha256 = :sha LIMIT 1"),
-                {"sha": sha},
-            ).first()
-            if dup:
-                # clean up created files to avoid orphaned duplicates
-                shutil.rmtree(dest, ignore_errors=True)
-                sidecar = dest.with_suffix(dest.suffix + ".json")
-                sidecar.unlink(missing_ok=True)
-                existing = conn.execute(
-                    text("""
-                        SELECT s.subject_id, mf.session_id, mf.run
-                        FROM microscopy_files mf
-                        JOIN sessions s ON mf.session_id = s.session_id
-                        WHERE mf.sha256 = :sha
-                        LIMIT 1
-                    """),
+            # reject duplicate content before touching DB state
+            with engine.connect() as conn:
+                dup = conn.execute(
+                    text("SELECT s.subject_id, mf.session_id, mf.run FROM microscopy_files mf JOIN sessions s ON mf.session_id = s.session_id WHERE mf.sha256 = :sha LIMIT 1"),
                     {"sha": sha},
                 ).first()
-                if existing:
-                    raise ValueError(
-                        f"Duplicate microscopy content detected (already stored for subject {existing.subject_id}, "
-                        f"session {existing.session_id}, run {existing.run})"
-                    )
-                raise ValueError(f"Duplicate microscopy content detected (sha256 already exists) for {src.name}")
+            if dup:
+                shutil.rmtree(dest, ignore_errors=True)
+                dest.with_suffix(dest.suffix + ".json").unlink(missing_ok=True)
+                raise ValueError(
+                    f"Duplicate microscopy content detected (already stored for subject {dup.subject_id}, session {dup.session_id}, run {dup.run})"
+                )
+            staged.append((idx, dest, sha))
 
-            # register file
+        # If we got here, all files are unique; register DB state now
+        with engine.begin() as conn:
             conn.execute(
                 text("""
-                    INSERT INTO microscopy_files (session_id, run, hemisphere, path, sha256)
-                    VALUES (:sid, :run, :hemi, :path, :sha)
-                    ON CONFLICT (session_id, run, hemisphere) DO NOTHING;
+                    INSERT INTO subjects (subject_id, original_id, sex, experiment_type, details)
+                    VALUES (:subj, :orig, 'U', :exp_type, '')
+                    ON CONFLICT (subject_id) DO NOTHING;
                 """),
-                {"sid": session, "run": idx, "hemi": hemisphere, "path": str(dest), "sha": sha},
+                {"subj": subject, "orig": subject, "exp_type": experiment_type},
             )
-            inserted.append(dest)
-    return inserted
+            conn.execute(
+                text("""
+                    INSERT INTO sessions (session_id, subject_id, modality)
+                    VALUES (:sid, :subj, :mod)
+                    ON CONFLICT (session_id) DO NOTHING;
+                """),
+                {"sid": session, "subj": subject, "mod": "micr"},
+            )
+            for idx, dest, sha in staged:
+                conn.execute(
+                    text("""
+                        INSERT INTO microscopy_files (session_id, run, hemisphere, path, sha256)
+                        VALUES (:sid, :run, :hemi, :path, :sha)
+                        ON CONFLICT (session_id, run, hemisphere) DO NOTHING;
+                    """),
+                    {"sid": session, "run": idx, "hemi": hemisphere, "path": str(dest), "sha": sha},
+                )
+        return [d for _, d, _ in staged]
+    except Exception:
+        # cleanup any staged files on error
+        for _, dest, _ in staged:
+            shutil.rmtree(dest, ignore_errors=True)
+            dest.with_suffix(dest.suffix + ".json").unlink(missing_ok=True)
+        raise
 
 
 def main():

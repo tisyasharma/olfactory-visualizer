@@ -350,8 +350,11 @@ function updateValueState(el){
   }
 }
 
-  [uploadModality, uploadDate].forEach(el => {
-  el?.addEventListener('change', () => updateValueState(el));
+[uploadModality, uploadDate].forEach(el => {
+  el?.addEventListener('change', () => {
+    updateValueState(el);
+    updateReadyStates(); // re-evaluate readiness regardless of the order fields are filled
+  });
   updateValueState(el);
 });
 
@@ -487,17 +490,25 @@ function updateReadyStates(){
   toggle(addCsvBilateral, countsQueues.bilateral.length > 0);
   toggle(addCsvLeft, countsQueues.left.length > 0);
   toggle(addCsvRight, countsQueues.right.length > 0);
-  const ready =
-    (uploadModality?.value || '').trim() &&
-    (uploadDate?.value || '').trim() &&
-    imageQueue.length > 0 &&
-    pendingCsv.length === 0 &&
-    countsQueues.bilateral.length > 0 &&
-    countsQueues.left.length > 0 &&
-    countsQueues.right.length > 0;
+  const missing = [];
+  if(!(uploadModality?.value || '').trim()){ missing.push('Select a modality'); }
+  if(!(uploadDate?.value || '').trim()){ missing.push('Choose a date'); }
+  if(imageQueue.length === 0){ missing.push('Add microscopy images'); }
+  if(pendingCsv.length > 0){ missing.push('Assign all quant CSVs'); }
+  if(countsQueues.bilateral.length === 0){ missing.push('Add bilateral CSV'); }
+  if(countsQueues.left.length === 0){ missing.push('Add ipsilateral CSV'); }
+  if(countsQueues.right.length === 0){ missing.push('Add contralateral CSV'); }
+  const ready = missing.length === 0;
   if(registerBtn){
     registerBtn.disabled = !ready;
     registerBtn.classList.toggle('btn--ready', !!ready);
+  }
+  // Surface why the button is disabled
+  if(!ready){
+    setWarning(`To enable Register: ${missing.join(' • ')}`);
+  }else{
+    setWarning('');
+    setStatus('Ready.');
   }
 }
 

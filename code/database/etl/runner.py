@@ -35,6 +35,8 @@ def run_etl():
         subjects.seed_subjects_and_sessions(conn, stats)
         conn.execute(text("INSERT INTO ingest_log (source_path, status, message) VALUES (:p, :s, :m)"),
                      {"p": str(DATA_ROOT), "s": "started", "m": "ETL started"})
+    # Also clean disallowed subject directories on disk so they don't reappear
+    subjects.cleanup_unknown_subject_dirs(allowed_subjects, stats)
 
     # Step 2: BIDS imaging files
     print("\n--- Step 2: Registering imaging files (BIDS) ---")

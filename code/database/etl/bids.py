@@ -54,18 +54,8 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
                 run = None
         # sample is required in microscopy BIDS, but we treat it as metadata here
         # and focus on subject/session/run/hemisphere for DB registration.
-        hemisphere = None
-        m_hemi = re.search(r"_hemi-([A-Za-z])", filename)
-        if m_hemi:
-            hv = m_hemi.group(1).lower()
-            if hv == "l":
-                hemisphere = "left"
-            elif hv == "r":
-                hemisphere = "right"
-            elif hv == "b":
-                hemisphere = "bilateral"
-        if hemisphere is None:
-            hemisphere = detect_hemisphere(zarr.parent.as_posix(), filename)
+        # Hemisphere not encoded in filename anymore; detect from path/name hints.
+        hemisphere = detect_hemisphere(zarr.parent.as_posix(), filename)
         sha = file_sha256(zarr)
         if sha in existing_hashes:
             stats["microscopy_skipped_dupe"] = stats.get("microscopy_skipped_dupe", 0) + 1

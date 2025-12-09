@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
+from code.src.conversion.config_map import SUBJECT_MAP
 
 
 def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:
@@ -48,14 +49,12 @@ def detect_hemisphere(root: str, filename: str) -> str:
     return "bilateral"
 
 
-def session_prefix(exp_type: str) -> str:
-    return "rab" if exp_type == "rabies" else "dbl"
-
-
 def get_or_create_session_id(conn, subject_id: str, exp_type: str, existing_sessions: dict | None = None, existing_ids: list[str] | None = None) -> str:
     """
     Return a session_id for a subject. If sessions exist for the subject, reuse the first.
-    Otherwise, generate the next available subject-prefixed session id (e.g., sub-rab01_ses-rab02).
+    Otherwise, use the configured session label from config_map when present, or fall back to 'ses-01'.
+    We avoid experiment-type-derived suffixes (e.g., _ses-rab01) to keep BIDS paths consistent:
+    sub-XXX/ses-01/... for all subjects.
     Does not insert rows here; caller can insert with ON CONFLICT DO NOTHING. Mutates existing_ids if provided.
     """
     subj_sessions = existing_sessions.get(subject_id) if existing_sessions is not None else None
@@ -72,20 +71,20 @@ def get_or_create_session_id(conn, subject_id: str, exp_type: str, existing_sess
             existing_ids = []
         else:
             existing_ids = [row.session_id for row in conn.execute(text("SELECT session_id FROM sessions WHERE subject_id = :sid"), {"sid": subject_id})]
-    pref = session_prefix(exp_type)
-    pat = re.compile(rf"^{re.escape(subject_id)}_ses-{pref}(\d+)$", re.IGNORECASE)
-    max_n = 0
-    for sid in existing_ids:
-        m = pat.match(sid or "")
-        if m:
-            try:
-                num = int(m.group(1))
-                if num > max_n:
-                    max_n = num
-            except ValueError:
-                continue
-    next_n = max_n + 1
-    new_id = f"{subject_id}_ses-{pref}{next_n:02d}"
+    # Preferred session label from config map
+    desired_session = "ses-01"
+    for meta in SUBJECT_MAP.values():
+        if meta.get("subject") == subject_id and meta.get("session"):
+            desired_session = meta["session"]
+            break
+    new_id = f"{subject_id}_{desired_session}"
+    # If somehow taken, append incrementing counter to keep uniqueness but stay BIDS-ish
+    if new_id in existing_ids:
+        base = new_id
+        counter = 2
+        while f"{base}-{counter:02d}" in existing_ids:
+            counter += 1
+        new_id = f"{base}-{counter:02d}"
     existing_ids.append(new_id)
     if existing_sessions is not None:
         existing_sessions.setdefault(subject_id, []).append(new_id)

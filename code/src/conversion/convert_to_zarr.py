@@ -122,7 +122,7 @@ def convert_subject(folder_name, metadata):
 
     # 6. Write to OME-Zarr
     sample_label = "sample-01"
-    zarr_filename = f"{metadata['subject']}_{metadata['session']}_{sample_label}_run-01_hemi-B_micr.ome.zarr"
+    zarr_filename = f"{metadata['subject']}_{metadata['session']}_{sample_label}_run-01_micr.ome.zarr"
     store_path = os.path.join(output_dir, zarr_filename)
 
     print(f"  Writing OME-Zarr to {store_path}...")

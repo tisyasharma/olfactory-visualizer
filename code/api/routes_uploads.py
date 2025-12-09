@@ -6,6 +6,7 @@ from typing import List, Optional
 import tempfile
 import shutil
 from pathlib import Path
+import hashlib
 import pandas as pd
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
@@ -20,6 +21,7 @@ from code.api.deps import (
 )
 from code.database.ingest_upload import ingest
 from sqlalchemy.exc import OperationalError
+from code.src.conversion.config_map import SUBJECT_MAP
 
 
 def next_subject_id(engine, experiment_type: str) -> str:
@@ -37,6 +39,7 @@ def next_subject_id(engine, experiment_type: str) -> str:
     return f"sub-{pref}{max_n+1:02d}"
 
 router = APIRouter(prefix="/api/v1", tags=["uploads"])
+ALLOWED_SUBJECTS = {meta["subject"] for meta in SUBJECT_MAP.values()}
 
 
 def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, hemisphere: str, experiment_type: str) -> int:
@@ -170,19 +173,9 @@ async def create_microscopy_files(
     saved_paths: List[Path] = []
     try:
         engine = get_engine()
-        # Decide subject_id (auto if not provided)
+        # Decide subject_id (auto-assign if omitted) but only after ensuring the batch is unique
         with engine.connect() as conn:
-            existing_subjects = [r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))]
-        if subject_id:
-            if subject_id in existing_subjects:
-                taken = ", ".join(existing_subjects[:10])
-                more = "" if len(existing_subjects) <= 10 else f" (+{len(existing_subjects)-10} more)"
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Subject ID '{subject_id}' already exists. Taken IDs: {taken}{more}. Please choose a new ID.",
-                )
-        else:
-            subject_id = next_subject_id(engine, experiment_type)
+            existing_subjects = {r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))}
 
         session_id = resolve_session_id(engine, subject_id, experiment_type, session_id)
         # prevent duplicate experiment loads
@@ -212,6 +205,35 @@ async def create_microscopy_files(
 
         # Stable order so run numbering is deterministic when folder uploads are used
         all_images = sorted(saved_paths, key=lambda p: p.name)
+        # Combined checksum of raw uploads (pre-conversion) to block identical reuploads
+        h = hashlib.sha256()
+        for p in all_images:
+            h.update(sha256_path(p).encode())
+        raw_batch_checksum = h.hexdigest()
+
+        with engine.connect() as conn:
+            dup_batch = conn.execute(
+                text("SELECT 1 FROM ingest_log WHERE checksum = :c AND status = 'success' AND message LIKE 'microscopy%' LIMIT 1"),
+                {"c": raw_batch_checksum},
+            ).first()
+        if dup_batch:
+            raise HTTPException(
+                status_code=409,
+                detail="These microscopy images were already ingested (checksum match); upload blocked.",
+            )
+
+        # Now assign subject_id if not provided, after confirming uniqueness
+        if subject_id:
+            # Allow any existing subject that matches prefixes (sub-rabXX/sub-dblXX) or config map
+            if subject_id not in existing_subjects and subject_id not in ALLOWED_SUBJECTS:
+                # If it looks malformed, reject
+                if not (subject_id.startswith("sub-rab") or subject_id.startswith("sub-dbl")):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Subject ID '{subject_id}' is not allowed. Use sub-rabXX or sub-dblXX.",
+                    )
+        else:
+            subject_id = next_subject_id(engine, experiment_type)
 
         try:
             ingested = ingest(
@@ -232,6 +254,20 @@ async def create_microscopy_files(
             raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Microscopy ingest failed: {e}")
+        # Record successful microscopy batch to prevent re-uploading the same images
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO ingest_log (source_path, checksum, status, message) "
+                    "VALUES (:p, :c, :s, :m)"
+                ),
+                {
+                    "p": ";".join(str(p) for p in all_images),
+                    "c": raw_batch_checksum,
+                    "s": "success",
+                    "m": f"microscopy upload {session_id}",
+                },
+            )
         return {
             "status": "ok",
             "subject_id": subject_id,
@@ -257,16 +293,12 @@ async def create_region_counts(
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     engine = get_engine()
-    # Block re-use of an existing subject_id to avoid duplicates
-    with engine.connect() as conn:
-        existing_subjects = [r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))]
-        if subject_id in existing_subjects:
-            taken = ", ".join(existing_subjects[:10])
-            more = "" if len(existing_subjects) <= 10 else f" (+{len(existing_subjects)-10} more)"
-            raise HTTPException(
-                status_code=409,
-                detail=f"Subject ID '{subject_id}' already exists. Taken IDs: {taken}{more}. Please choose a new ID.",
-            )
+    # Subject must be in allowed set; counts are added to existing subject
+    if subject_id not in ALLOWED_SUBJECTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Subject ID '{subject_id}' is not allowed. Allowed: {sorted(ALLOWED_SUBJECTS)}",
+        )
     sess = resolve_session_id(engine, subject_id, experiment_type, session_id)
 
     tmpdir = Path(tempfile.mkdtemp())
