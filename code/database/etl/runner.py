@@ -10,7 +10,8 @@ from .stats import summarize
 from .atlas import load_atlas
 from code.src.conversion.subject_map import SUBJECT_MAP
 from pathlib import Path
-from .utils import combine_hashes, ensure_batches_table, file_sha256
+from .utils import ensure_batches_table
+from code.common.hashing import combine_hashes, file_sha256
 
 
 def seed_batch_hashes(engine, allowed_subjects: set, stats: dict):

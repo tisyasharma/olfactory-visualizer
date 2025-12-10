@@ -9,23 +9,8 @@ import pandas as pd
 from sqlalchemy import text
 from code.src.conversion.subject_map import SUBJECT_MAP
 from typing import List
-from code.api.duplication import combine_hashes, ensure_batches_table  # reuse shared hashing/table setup
-
-
-def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:
-    h = hashlib.sha256()
-    if path.is_dir():
-        # Deterministic walk for stable hashes
-        for sub in sorted(p for p in path.rglob("*") if p.is_file()):
-            h.update(str(sub.relative_to(path)).encode())
-            with sub.open("rb") as f:
-                for chunk in iter(lambda: f.read(chunk_size), b""):
-                    h.update(chunk)
-    else:
-        with path.open("rb") as f:
-            for chunk in iter(lambda: f.read(chunk_size), b""):
-                h.update(chunk)
-    return h.hexdigest()
+from code.api.duplication import ensure_batches_table  # reuse shared hashing/table setup
+from code.common.hashing import file_sha256, combine_hashes
 
 
 def clean_numeric(val):

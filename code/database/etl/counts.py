@@ -1,20 +1,22 @@
 """
 Quantification CSV ingest.
 Reason: encapsulate checksum dedupe, session creation, and counts insert logic.
+Now reuses the same upload helper to avoid drift.
 """
 import os
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text, types as satypes
 from .utils import (
-    clean_numeric,
     detect_hemisphere,
     get_or_create_session_id,
     load_table,
     file_sha256,
+    clean_numeric,
 )
 from code.src.conversion.subject_map import SUBJECT_MAP
 from .paths import DATA_ROOT
+from code.database.etl.counts_helper import prepare_counts_dataframe
 
 
 def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
@@ -109,53 +111,35 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
                         f"does not match reference '{ref_name}'."
                     )
 
-            for r in df.itertuples(index=False):
-                # Images are bilateral; quant is split by hemisphere. Prefer hemi match, else use bilateral image.
-                file_id = file_map.get((subject_id, hemi))
-                if not file_id and hemi in ("left", "right"):
-                    # fall back to bilateral microscopy if ipsi/contra not present
-                    file_id = file_map.get((subject_id, "bilateral"))
-                if not file_id:
-                    stats["counts_skipped_missing_file"] = stats.get("counts_skipped_missing_file", 0) + 1
-                    continue
+            # Images are bilateral; quant is split by hemisphere. Prefer hemi match, else use bilateral image.
+            file_id = file_map.get((subject_id, hemi))
+            if not file_id and hemi in ("left", "right"):
+                file_id = file_map.get((subject_id, "bilateral"))
+            if not file_id:
+                stats["counts_skipped_missing_file"] = stats.get("counts_skipped_missing_file", 0) + 1
+                continue
 
-                sess = session_cache.get(subject_id)
-                if not sess:
-                    sess = get_or_create_session_id(None, subject_id, exp_type, existing_sessions, existing_session_ids)
-                    session_cache[subject_id] = sess
-                    existing_sessions.setdefault(subject_id, []).append(sess)
-                    existing_session_ids.append(sess)
-                session_rows_from_counts.append(
-                    {
-                        "session_id": sess,
-                        "subject_id": subject_id,
-                        "modality": "micr",
-                        "session_date": None,
-                        "protocol": None,
-                        "notes": None,
-                    }
-                )
-                count_rows.append(
-                    {
-                        "subject_id": subject_id,
-                        "region_id": int(r.region_id),
-                        "region_pixels": clean_numeric(r.region_pixels),
-                        "region_area_mm": clean_numeric(getattr(r, "region_area", None)),
-                        "object_count": clean_numeric(getattr(r, "object_count", None)),
-                        "object_pixels": clean_numeric(getattr(r, "object_pixels", None)),
-                        "object_area_mm": clean_numeric(getattr(r, "object_area", None)),
-                        "load": clean_numeric(r.load),
-                        "norm_load": clean_numeric(getattr(r, "norm_load", None)),
-                        "hemisphere": hemi,
-                        "file_id": file_id,
-                        "region_pixels_unit_id": unit_map.get("pixels"),
-                        "region_area_unit_id": unit_map.get("pixels"),  # area is in pixels in source
-                        "object_count_unit_id": unit_map.get("count"),
-                        "object_pixels_unit_id": unit_map.get("pixels"),
-                        "object_area_unit_id": unit_map.get("pixels"),
-                        "load_unit_id": unit_map.get("pixels"),
-                    }
-                )
+            sess = session_cache.get(subject_id)
+            if not sess:
+                sess = get_or_create_session_id(None, subject_id, exp_type, existing_sessions, existing_session_ids)
+                session_cache[subject_id] = sess
+                existing_sessions.setdefault(subject_id, []).append(sess)
+                existing_session_ids.append(sess)
+            session_rows_from_counts.append(
+                {
+                    "session_id": sess,
+                    "subject_id": subject_id,
+                    "modality": "micr",
+                    "session_date": None,
+                    "protocol": None,
+                    "notes": None,
+                }
+            )
+
+            # Use the shared transformer to build rows
+            df_counts = prepare_counts_dataframe(engine, Path(csv_path), subject_id, sess, hemi, file_id=file_id)
+            count_rows.extend(df_counts.to_dict(orient="records"))
+            df = df_counts
 
             seen_checksums.add(chk)
             stats["counts_ingested_rows"] = stats.get("counts_ingested_rows", 0) + len(df)
@@ -165,7 +149,7 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
                         "INSERT INTO ingest_log (source_path, checksum, rows_loaded, status, message) "
                         "VALUES (:p, :c, :r, :s, :m)"
                     ),
-                    {"p": str(csv_path), "c": chk, "r": len(df), "s": "success", "m": "ETL counts ingest"},
+                    {"p": str(csv_path), "c": chk, "r": len(df_counts), "s": "success", "m": "ETL counts ingest"},
                 )
 
     return count_rows, session_rows_from_counts, extra_regions

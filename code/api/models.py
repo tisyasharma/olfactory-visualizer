@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 class DuplicateCheckResponse(BaseModel):
@@ -22,3 +22,7 @@ class RegionCountSummary(BaseModel):
     hemisphere: Optional[str] = None
     region_pixels: Optional[float] = None
     load: Optional[float] = None
+
+
+class HashesPayload(BaseModel):
+    hashes: List[str]

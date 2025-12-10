@@ -6,47 +6,18 @@ downstream aggregations use microscopy_files/region_counts.
 Overlap threshold defaults to 80% of files to catch path/order differences.
 """
 from pathlib import Path
-from typing import List, Optional
-import hashlib
+from typing import List, Optional, Union
 
+from sqlalchemy.engine import Connection
 from sqlalchemy import text
+
+from code.common.hashing import combine_hashes, combine_hex_hashes, file_sha256
 
 DEFAULT_OVERLAP_THRESHOLD = 0.8
 DUPLICATE_MESSAGE = "These microscopy images were already ingested."
 
 
-def combine_hashes(paths: List[Path]) -> str:
-    """
-    Order-insensitive batch hash based on file contents.
-    Sort individual sha256 strings, then hash their concatenation.
-    """
-    shas = [file_sha256(p) for p in paths]
-    return combine_hex_hashes(shas)
-
-
-def combine_hex_hashes(shas: List[str]) -> str:
-    """
-    Order-insensitive hash of already-computed hex digests.
-    Sort input hex strings, then hash their concatenation.
-    """
-    shas = sorted([s.strip() for s in shas if s])
-    h = hashlib.sha256()
-    for s in shas:
-        h.update(s.encode())
-    return h.hexdigest()
-
-
-def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            if not chunk:
-                break
-            h.update(chunk)
-    return h.hexdigest()
-
-
-def ensure_batches_table(engine):
+def ensure_batches_table(engine_or_conn: Union["Connection", object]):
     """Create microscopy batch tables if missing."""
     ddl = """
     CREATE TABLE IF NOT EXISTS microscopy_batches (
@@ -60,8 +31,11 @@ def ensure_batches_table(engine):
         PRIMARY KEY(batch_checksum, file_sha)
     );
     """
-    with engine.begin() as conn:
-        conn.execute(text(ddl))
+    if isinstance(engine_or_conn, Connection):
+        engine_or_conn.execute(text(ddl))
+    else:
+        with engine_or_conn.begin() as conn:
+            conn.execute(text(ddl))
 
 
 def register_batch(engine, batch_checksum: str, file_hashes: List[str], note: Optional[str] = None):

@@ -10,7 +10,6 @@ Usage (example):
 """
 
 import argparse
-import hashlib
 import json
 import shutil
 from datetime import datetime
@@ -27,31 +26,10 @@ from ome_zarr.writer import write_image
 from sqlalchemy import text, types as satypes
 
 from code.database.connect import get_engine
+from code.common.hashing import file_sha256
 
 ROOT = Path(__file__).resolve().parents[2]  # project root
 BIDS_ROOT = ROOT / "data" / "raw_bids"
-
-
-def file_sha256(path: Path, chunk_size: int = 1_048_576) -> str:
-    h = hashlib.sha256()
-    if path.is_dir():
-        # Deterministic walk so the same tree hashes identically
-        for sub in sorted(p for p in path.rglob("*") if p.is_file()):
-            h.update(str(sub.relative_to(path)).encode())
-            with sub.open("rb") as f:
-                while True:
-                    chunk = f.read(chunk_size)
-                    if not chunk:
-                        break
-                    h.update(chunk)
-    else:
-        with path.open("rb") as f:
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                h.update(chunk)
-    return h.hexdigest()
 
 
 def load_image(path: Path) -> np.ndarray:
