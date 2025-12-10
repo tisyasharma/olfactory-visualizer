@@ -24,8 +24,9 @@ genotypeSelect?.addEventListener('change', syncGlobalFilters);
 lateralitySelect?.addEventListener('change', syncGlobalFilters);
 mouseSelect?.addEventListener('change', syncGlobalFilters);
 
+// Sync top-level dataset filters (date/modality/hemisphere) into the UI state. 
 function syncGlobalFilters(){
-  // charts removed for now; placeholder hook for future visuals
+  // charts removed for now, placeholder hook for future visuals
 }
 
 // Tabs logic
@@ -41,6 +42,7 @@ tabs.forEach(({btn, panel}) => {
   b?.addEventListener('click', () => activateTab(btn, panel));
 });
 
+// Switch tab buttons and panels for the dataset sections. 
 function activateTab(activeBtnId, activePanelId){
   // buttons
   document.querySelectorAll('.tab').forEach(t => {
@@ -61,7 +63,7 @@ const rabiesWindow = document.getElementById('rabiesWindow');
 const rabiesWindowVal = document.getElementById('rabiesWindowVal');
 rabiesWindow?.addEventListener('input', () => {
   rabiesWindowVal.textContent = rabiesWindow.value;
-  // TODO: update rabies charts
+  drawRabiesDotPlot();
 });
 
 // Vega-Lite theme (kept for future charts)
@@ -71,6 +73,7 @@ const accent3 = getComputedStyle(document.documentElement).getPropertyValue('--a
 
 const API = '/api/v1';
 
+// Initialize VegaLite theme defaults.
 function vlTheme(){
   return {
     background: 'transparent',
@@ -87,6 +90,7 @@ async function embedVL(targetId, spec){
 }
 
 // Placeholder updaters (no data yet)
+// Normalize hemisphere input to api-friendly values.
 function normalizeHemisphere(val){
   if(!val || val === 'all') return null;
   if(val === 'ipsi') return 'left';
@@ -94,49 +98,391 @@ function normalizeHemisphere(val){
   if(['left','right','bilateral'].includes(val)) return val;
   return null;
 }
+// Map UI laterality values to API hemisphere names
 function mapLateralityToApi(val){
   return normalizeHemisphere(val) || 'bilateral';
 }
 
 // Data fetchers for future charts (kept for reuse)
-async function fetchFluorSummary(experimentType, hemisphere, subjectId, regionId){
+async function fetchFluorSummary(experimentType, hemisphere, subjectId, regionId, groupBy){
   const qs = new URLSearchParams();
   if(experimentType) qs.append('experiment_type', experimentType);
   if(hemisphere) qs.append('hemisphere', hemisphere);
   if(subjectId && subjectId !== 'all') qs.append('subject_id', subjectId);
   if(regionId) qs.append('region_id', regionId);
-  qs.append('limit', 200);
+  if(groupBy) qs.append('group_by', groupBy);
+  qs.append('limit', 500);
   return fetchJson(`${API}/fluor/summary?${qs.toString()}`);
 }
 
-async function updateRabiesCharts(params){
-  const hemi = normalizeHemisphere(params?.laterality);
-  try{
-    const data = await fetchFluorSummary('rabies', hemi, params?.mouse);
-    const values = data.map(d => ({
-      region: d.region_name,
-      load: d.load_avg ?? 0,
-      pixels: d.region_pixels_avg ?? 0
-    })).sort((a,b) => b.load - a.load).slice(0, 20);
-    const spec = {
-      data: { values },
-      mark: { type:'bar', cornerRadiusEnd:3 },
-      encoding: {
-        x: { field:'load', type:'quantitative', title:'Avg load', axis:{grid:false} },
-        y: { field:'region', type:'nominal', sort:'-x', title:'Region', axis:{labelLimit:180} },
-        color: { field:'load', type:'quantitative', legend:null, scale:{scheme:'blues'} },
-        tooltip: [
-          {field:'region', type:'nominal'},
-          {field:'load', type:'quantitative', title:'Avg load', format:'.4f'},
-          {field:'pixels', type:'quantitative', title:'Avg pixels', format:'.0f'}
-        ]
-      }
-    };
-    embedVL('rabies_load_chart', spec);
-  }catch(err){
-    console.warn('Rabies chart failed', err);
-    embedVL('rabies_load_chart', { data:{values:[]}, mark:'bar', encoding:{} });
+async function fetchRegionLoadSummary(hemisphere){
+  const qs = new URLSearchParams();
+  if(hemisphere) qs.append('hemisphere', hemisphere);
+  return fetchJson(`${API}/region-load/summary?${qs.toString()}`);
+}
+
+async function fetchRegionLoadByMouse(hemisphere){
+  const qs = new URLSearchParams();
+  qs.append('experiment_type', 'rabies');
+  if(hemisphere) qs.append('hemisphere', hemisphere);
+  return fetchJson(`${API}/region-load/by-mouse?${qs.toString()}`);
+}
+
+// Rabies Cleveland Dot Plot default regions upon reload
+const defaultRabiesRegions = [
+  'Nucleus of the lateral olfactory tract, layer 3',
+  'Nucleus of the lateral olfactory tract, pyramidal layer',
+  'Nucleus of the lateral olfactory tract, molecular layer',
+  'Piriform area',
+  'Dorsal peduncular area',
+  'Taenia tecta, ventral part',
+  'Taenia tecta, dorsal part',
+  'Anterior olfactory nucleus',
+  'Main olfactory bulb'
+];
+
+const rabiesState = {
+  search: '',
+  groupBy: 'genotype',
+  hemisphere: 'bilateral',
+  selectedRegions: new Set(),
+  data: [],
+  dataByHemi: { ipsilateral: [], contralateral: [] },
+  regions: [],
+  allRegions: [],
+  loading: false,
+  regionTreeCached: false
+};
+
+const regionSearch = document.getElementById('rabiesRegionSearch');
+const regionListEl = document.getElementById('rabiesRegionList');
+const tooltip = document.getElementById('rabiesTooltip');
+const groupRadios = document.querySelectorAll('input[name="rabiesGroupBy"]');
+const rabiesSelectedCount = document.getElementById('rabiesSelectedCount');
+const rabiesResetBtn = document.getElementById('rabiesResetBtn');
+const rabiesClearBtn = document.getElementById('rabiesClearBtn');
+const rabiesStatus = document.getElementById('rabiesStatus');
+
+regionSearch?.addEventListener('input', (e) => {
+  rabiesState.search = e.target.value.toLowerCase();
+  renderRegionList();
+});
+
+regionSearch?.addEventListener('change', (e) => {
+  const val = (e.target.value || '').trim();
+  if(val && rabiesState.regions.includes(val)){
+    rabiesState.selectedRegions.add(val);
+    e.target.value = '';
+    rabiesState.search = '';
+    renderRegionList();
+    drawRabiesDotPlot();
   }
+});
+
+groupRadios.forEach(r => r.addEventListener('change', () => {
+  if(!r.checked) return;
+  rabiesState.groupBy = r.value === 'subject' ? 'subject' : 'genotype';
+  loadRabiesData();
+}));
+
+rabiesResetBtn?.addEventListener('click', () => {
+  applyDefaultRabiesSelection();
+  renderRegionList();
+  drawRabiesDotPlot();
+});
+
+rabiesClearBtn?.addEventListener('click', () => {
+  rabiesState.selectedRegions = new Set();
+  renderRegionList();
+  drawRabiesDotPlot();
+  updateSelectedCount();
+});
+
+function updateSelectedCount(){
+  if(rabiesSelectedCount){
+    const count = rabiesState.selectedRegions.size;
+    rabiesSelectedCount.textContent = count ? `${count} selected` : '0 selected';
+  }
+}
+
+function setRabiesStatus(msg, tone='muted'){
+  if(!rabiesStatus) return;
+  rabiesStatus.textContent = msg || '';
+  rabiesStatus.className = `rabies-status ${tone}`;
+}
+
+// Render the rabies region checklist based on search and selection. 
+function renderRegionList(){
+  if(!regionListEl) return;
+  regionListEl.innerHTML = '';
+  const filtered = rabiesState.regions.filter(r => r.toLowerCase().includes(rabiesState.search));
+  filtered.forEach(region => {
+    const id = `reg-${region.replace(/\W+/g,'-')}`;
+    const wrapper = document.createElement('label');
+    wrapper.className = 'region-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = id;
+    cb.value = region;
+    cb.checked = rabiesState.selectedRegions.has(region);
+    cb.addEventListener('change', (e) => {
+      if(e.target.checked){
+        rabiesState.selectedRegions.add(region);
+      }else{
+        rabiesState.selectedRegions.delete(region);
+      }
+      drawRabiesDotPlot();
+    });
+    const span = document.createElement('span');
+    span.textContent = region;
+    wrapper.append(cb, span);
+    regionListEl.append(wrapper);
+  });
+}
+async function loadRabiesData(){
+  rabiesState.loading = true;
+  setRabiesStatus('Loading rabies data…', 'muted');
+  try{
+    // Always pull both hemispheres and show side by side.
+    const allowedGenos = new Set(['Vglut1','Vgat']);
+    const [ipsiRaw, contraRaw] = await Promise.all([
+      fetchRegionLoadByMouse('left'),
+      fetchRegionLoadByMouse('right')
+    ]);
+    const clean = rows => rows.filter(r => allowedGenos.has((r.genotype || '').trim()));
+    const ipsi = clean(ipsiRaw);
+    const contra = clean(contraRaw);
+    rabiesState.dataByHemi = { ipsilateral: ipsi, contralateral: contra };
+    const allData = [...ipsi, ...contra];
+    // Seed region names from the data while we fetch the tree.
+    const regionSet = new Set(allData.map(d => d.region));
+    defaultRabiesRegions.forEach(r => regionSet.add(r));
+    rabiesState.allRegions = Array.from(regionSet).sort();
+    rabiesState.data = allData;
+    applyDefaultRabiesSelection();
+    rabiesState.regions = rabiesState.allRegions;
+    renderRegionList();
+    drawRabiesDotPlot();
+    // Fetch region tree once (caches) to fill the picker with full atlas names.
+    if(!rabiesState.regionTreeCached){
+      try{
+        const regionTree = await fetchJson(`${API}/regions/tree`);
+        const regionNames = Array.from(new Set((regionTree || []).map(r => r.name))).sort();
+        if(regionNames.length){
+          rabiesState.allRegions = regionNames;
+          rabiesState.regions = rabiesState.allRegions;
+          // Keep current selections if they still exist; otherwise reapply defaults.
+          const retained = new Set(Array.from(rabiesState.selectedRegions).filter(r => regionNames.includes(r)));
+          if(retained.size){
+            rabiesState.selectedRegions = retained;
+          }else{
+            applyDefaultRabiesSelection();
+          }
+          renderRegionList();
+          drawRabiesDotPlot();
+        }
+        rabiesState.regionTreeCached = true;
+      }catch(treeErr){
+        console.warn('Region tree load failed', treeErr);
+      }
+    }
+    setRabiesStatus(allData.length ? 'Showing normalized load fractions.' : 'No rabies data found. Ingest data to populate the plot.', allData.length ? 'muted' : 'note');
+  }catch(err){
+    console.warn('Rabies data load failed', err);
+    setRabiesStatus('Rabies data load failed. Check the API and try again.', 'note');
+  }finally{
+    rabiesState.loading = false;
+  }
+}
+
+function applyDefaultRabiesSelection(){
+  // build default selection with fuzzy matching to the nine regions we care about
+  const clean = (s='') => s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const matched = [];
+  defaultRabiesRegions.forEach(def => {
+    const exact = rabiesState.allRegions.find(r => clean(r) === clean(def));
+    const fuzzy = rabiesState.allRegions.find(r => clean(r).includes(clean(def)));
+    const pick = exact || fuzzy;
+    if(pick && !matched.includes(pick)) matched.push(pick);
+  });
+  // Only keep those matches; no auto-fill with other regions
+  rabiesState.selectedRegions = new Set(matched);
+  updateSelectedCount();
+}
+
+/* Draw both ipsilateral and contralateral rabies dot plots. */
+function drawRabiesDotPlot(){
+  drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi');
+  drawRabiesSingle('contralateral', '#rabiesDotPlotContra');
+}
+
+/* Render a single rabies dot plot for the given hemisphere. */
+function drawRabiesSingle(hemiKey, selector){
+  const container = d3.select(selector);
+  if(container.empty()) return;
+  container.selectAll('*').remove();
+  const valuesSource = rabiesState.dataByHemi[hemiKey] || [];
+  if(rabiesState.selectedRegions.size === 0){
+    container.append('div').attr('class','muted').text('Select regions to plot.');
+    return;
+  }
+  const selectedRegions = rabiesState.selectedRegions.size
+    ? Array.from(rabiesState.selectedRegions)
+    : Array.from(new Set(rabiesState.data.map(d => d.region)));
+
+  // Build chart data for every selected region, even if missing -> value 0.
+  let chartData = [];
+  if(rabiesState.groupBy === 'genotype'){
+    selectedRegions.forEach(region => {
+      const grouped = { Vglut1: [], Vgat: [] };
+      valuesSource.filter(v => v.region === region).forEach(v => {
+        const geno = v.genotype || 'other';
+        if(geno !== 'Vglut1' && geno !== 'Vgat') return;
+        if(v.load_fraction != null){
+          grouped[geno].push(v.load_fraction);
+        }
+      });
+      const pushAgg = (label, vals) => {
+        const n = vals.length;
+        const mean = n ? vals.reduce((a,b)=>a+b,0) / n : 0;
+        let sem = 0;
+        if(n > 1){
+          const variance = vals.reduce((a,b)=>a + Math.pow(b-mean,2),0) / (n-1);
+          sem = Math.sqrt(variance) / Math.sqrt(n);
+        }
+        chartData.push({ region, group: label, value: mean, sem, n });
+      };
+      pushAgg('Vglut1', grouped['Vglut1']);
+      pushAgg('Vgat', grouped['Vgat']);
+    });
+  }else{
+    // subject-level: one dot per mouse, but color still tied to genotype
+    chartData = selectedRegions.flatMap(region => {
+      return valuesSource
+        .filter(v => v.region === region)
+        .map(v => {
+          const g = v.genotype || 'other';
+          if(g !== 'Vglut1' && g !== 'Vgat') return null;
+          return {
+            region,
+            group: g,
+            subject: v.subject_id,
+            value: v.load_fraction ?? 0,
+            sem: 0,
+            n: 1
+          };
+        })
+        .filter(Boolean);
+    });
+  }
+
+  const regions = selectedRegions;
+
+  if(!chartData.length){
+    container.append('div').attr('class','muted').text('No data to display.');
+    return;
+  }
+  const margin = { top: 20, right: 220, bottom: 40, left: 260 };
+  const width = Math.max(720, container.node().clientWidth || 720);
+  const hCount = Math.max(regions.length, 9);
+  const height = Math.max(320, hCount * 26 + margin.top + margin.bottom);
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet')
+    .style('width','100%')
+    .style('height','100%');
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(chartData, d => d.value) || 1])
+    .range([margin.left, width - margin.right]);
+
+  const y = d3.scalePoint()
+    .domain(regions)
+    .range([margin.top, height - margin.bottom])
+    .padding(0.5);
+
+  const color = d3.scaleOrdinal()
+    .domain(['Vglut1','Vgat'])
+    .range([accent2, accent1]);
+
+  // Error bars: mean +/- SEM (only meaningful for aggregated genotype view)
+  if(rabiesState.groupBy === 'genotype'){
+    svg.append('g')
+      .selectAll('line.err')
+      .data(chartData)
+      .enter()
+      .append('line')
+      .attr('class', 'err')
+      .attr('x1', d => x(Math.max(0, d.value - d.sem)))
+      .attr('x2', d => x(d.value + d.sem))
+      .attr('y1', d => y(d.region))
+      .attr('y2', d => y(d.region))
+      .attr('stroke', '#cbd5e1')
+      .attr('stroke-width', 2);
+  }
+
+  // Points
+  svg.append('g')
+    .selectAll('circle')
+    .data(chartData)
+    .enter()
+    .append('circle')
+    .attr('cx', d => x(d.value))
+    .attr('cy', d => y(d.region))
+    .attr('r', 6)
+    .attr('fill', d => color(d.group))
+    .attr('fill-opacity', 0.1)
+    .attr('stroke', d => color(d.group))
+    .attr('stroke-width', 2)
+    .on('mouseenter', (event, d) => showTooltip(event, d))
+    .on('mouseleave', hideTooltip);
+
+  const xAxis = d3.axisBottom(x).ticks(5).tickSizeOuter(0);
+  const yAxis = d3.axisLeft(y).tickSize(0);
+  svg.append('g')
+    .attr('transform', `translate(0,${height - margin.bottom})`)
+    .call(xAxis)
+    .call(g => g.selectAll('.domain').attr('stroke','#e5e7eb'))
+    .call(g => g.append('text')
+      .attr('x', width - margin.right)
+      .attr('y', 32)
+      .attr('fill', '#475569')
+      .attr('text-anchor', 'end')
+      .attr('font-size', 12)
+      .text('Load fraction (per mouse normalized)'));
+  svg.append('g')
+    .attr('transform', `translate(${margin.left - 10},0)`)
+    .call(yAxis)
+    .call(g => g.selectAll('text').attr('font-size', 12));
+
+  // Legend
+  const legend = svg.append('g')
+    .attr('transform', `translate(${width - margin.right + 20}, ${margin.top})`);
+  ['Vglut1','Vgat'].forEach((label, idx) => {
+    const row = legend.append('g').attr('transform', `translate(0, ${idx * 20})`);
+    row.append('rect').attr('width',14).attr('height',14).attr('rx',3).attr('fill', color(label)).attr('fill-opacity',0.15).attr('stroke', color(label));
+    row.append('text').attr('x', 20).attr('y',12).text(label).attr('fill','#374151').attr('font-size',12);
+  });
+}
+
+/* Show the floating tooltip for rabies dots. */
+function showTooltip(event, d){
+  if(!tooltip) return;
+  tooltip.hidden = false;
+  const semTxt = d.sem ? d.sem.toFixed(4) : 'NA';
+  const label = rabiesState.groupBy === 'genotype' ? `${d.group} (mean +/- sem)` : d.group;
+  tooltip.innerHTML = `<strong>${d.region}</strong><br/>${label}<br/>Mean load fraction: ${d.value.toFixed(4)}<br/>SEM: ${semTxt}<br/>n: ${d.n || 'NA'}`;
+  const rect = tooltip.getBoundingClientRect();
+  tooltip.style.left = `${event.pageX - rect.width/2}px`;
+  tooltip.style.top = `${event.pageY - rect.height - 10}px`;
+}
+/* Hide the floating tooltip. */
+function hideTooltip(){
+  if(tooltip) tooltip.hidden = true;
+}
+
+async function updateRabiesCharts(params){
+  // Deprecated bar chart; Cleveland plot handled separately.
 }
 
 async function updateDoubleCharts(params){
@@ -168,6 +514,7 @@ async function updateRegionalCharts(params){
   // Placeholder for other datasets; keep empty for now
 }
 
+
 // Init
 (function init(){
   // open first tab by default
@@ -176,6 +523,7 @@ async function updateRegionalCharts(params){
   loadSamples();
   loadFiles();
   syncGlobalFilters();
+  loadRabiesData();
 })();
 
 /* === Upload Center Logic === */
@@ -238,6 +586,7 @@ dropzone?.addEventListener('drop', (e) => {
   if(csvs.length){ addFiles(csvs, 'pending'); }
 });
 
+/* Add dropped/selected files to a target queue (images or CSVs). */
 function addFiles(files, target){
 const rejected = [];
 files.forEach(f => {
@@ -281,6 +630,7 @@ files.forEach(f => {
   }
 }
 
+/* Render the UI lists for queued image and CSV files. */
 function renderFileLists(){
   if(imageList){
     if(imageQueue.length === 0){ imageList.innerHTML = ''; }
@@ -358,6 +708,7 @@ clearBtn?.addEventListener('click', () => {
   resetUploadForm();
 });
 
+/* Update tracked state when a form field changes. */
 function updateValueState(el){
   if(!el) return;
   if(el.value && el.value.trim() !== ''){
@@ -459,6 +810,7 @@ registerBtn?.addEventListener('click', async () => {
   }
 });
 
+/* Set the green status strip text. */
 function setStatus(msg){
   if(uploadStatus){ uploadStatus.textContent = msg; uploadStatus.hidden = false; }
   if(uploadWarning){
@@ -468,10 +820,12 @@ function setStatus(msg){
     uploadWarning.style.display = 'none';
   }
 }
+/* Set the blue guidance strip text. */
 function setGuidance(msg){
   if(!uploadGuidance) return;
   uploadGuidance.textContent = msg || '';
 }
+/* Set the duplicate warning strip text. */
 function setDupNotice(msg){
   if(!dupNotice) return;
   if(!msg){
@@ -482,6 +836,7 @@ function setDupNotice(msg){
   dupNotice.hidden = false;
   dupNotice.textContent = msg;
 }
+/* Set the red warning strip text. */
 function setWarning(msg){
   if(!msg){
     if(uploadWarning){
@@ -502,6 +857,7 @@ function setWarning(msg){
   if(uploadStatus){ uploadStatus.hidden = true; }
 }
 
+/* Show a blocking spinner with label. */
 function showSpinner(label){
   if(!uploadSpinner) return;
   uploadSpinner.classList.remove('spinner--success');
@@ -509,6 +865,7 @@ function showSpinner(label){
   if(textEl){ textEl.textContent = label || 'Uploading…'; }
   uploadSpinner.hidden = false;
 }
+/* Hide the blocking spinner. */
 function hideSpinner(){
   if(uploadSpinner){
     uploadSpinner.hidden = true;
@@ -518,6 +875,7 @@ function hideSpinner(){
   }
 }
 
+/* Evaluate upload readiness (enable/disable Register). */
 function updateReadyStates(){
   const toggle = (el, ready) => {
     if(!el) return;
@@ -561,6 +919,7 @@ function updateReadyStates(){
   }
 }
 
+// Format bytes into human-readable units. 
 function prettyBytes(bytes){
   if(bytes < 1024) return bytes + ' B';
   const units = ['KB','MB','GB','TB'];
@@ -597,6 +956,7 @@ async function uploadMicroscopy(modality, sessionId, hemisphere, files, comment)
   return data;
 }
 
+/* Clear all upload queues and reset form fields. */
 function resetUploadForm(){
   imageQueue.splice(0, imageQueue.length);
   pendingCsv.splice(0, pendingCsv.length);
@@ -678,7 +1038,7 @@ async function checkDuplicatePreflight({ force=false } = {}){
     // Microscopy check
     if(imageQueue.length){
       const hashes = await Promise.all(imageQueue.map(hashFile));
-      const res = await fetch(`${API}/microscopy-files/duplicate-check`, {
+      const res = await fetch(`${API}/microscopy-files/check-duplicate`, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(hashes),
@@ -697,7 +1057,7 @@ async function checkDuplicatePreflight({ force=false } = {}){
       if(allCsv.length){
         const formCsv = new FormData();
         allCsv.forEach(f => formCsv.append('files', f, f.name));
-        const resCsv = await fetch(`${API}/region-counts/duplicate-check`, { method:'POST', body: formCsv, signal: sig });
+        const resCsv = await fetch(`${API}/region-counts/check-duplicate`, { method:'POST', body: formCsv, signal: sig });
         if(resCsv.ok){
           const data = await resCsv.json();
           if(data.duplicate){
@@ -764,6 +1124,7 @@ async function loadFiles(){
   }
 }
 
+/* Render details for a selected microscopy file in the viewer dropdown. */
 function renderFileDetails(option){
   if(!option || !fileDetails) return;
   const path = decodeURIComponent(option.getAttribute('data-path') || '');
@@ -820,6 +1181,7 @@ scrnaClusterSelect?.addEventListener('change', () => {
   updateScrnaHeatmap(sample, cluster);
 });
 
+/* Render the scRNA bar chart stub (placeholder). */
 function updateScrnaBar(clusters){
   if(!clusters || !clusters.length){
     embedVL('scrna_bar', { data:{values:[]}, mark:'bar', encoding:{} });

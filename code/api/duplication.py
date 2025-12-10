@@ -1,24 +1,20 @@
 """
-Microscopy duplicate detection helpers.
-Centralizes batch/per-file hashing, duplicate detection, and table setup.
-Note: microscopy_batches / microscopy_batch_files are used solely for duplicate guarding;
-downstream aggregations use microscopy_files/region_counts.
-Overlap threshold defaults to 80% of files to catch path/order differences.
+Little helper set to keep us from double-ingesting microscopy files.
+We stash batch/file hashes in their own tables so the main data stays clean, and
+we default to an 80% overlap check to catch shuffled uploads.
 """
-from pathlib import Path
 from typing import List, Optional, Union
 
 from sqlalchemy.engine import Connection
 from sqlalchemy import text
 
-from code.common.hashing import combine_hashes, combine_hex_hashes, file_sha256
+from code.api.settings import OVERLAP_THRESHOLD, DUPLICATE_MESSAGE
 
-DEFAULT_OVERLAP_THRESHOLD = 0.8
-DUPLICATE_MESSAGE = "These microscopy images were already ingested."
+DEFAULT_OVERLAP_THRESHOLD = OVERLAP_THRESHOLD
 
 
 def ensure_batches_table(engine_or_conn: Union["Connection", object]):
-    """Create microscopy batch tables if missing."""
+    """Make sure the hash tables exist before we touch them."""
     ddl = """
     CREATE TABLE IF NOT EXISTS microscopy_batches (
         batch_checksum TEXT PRIMARY KEY,
@@ -39,7 +35,7 @@ def ensure_batches_table(engine_or_conn: Union["Connection", object]):
 
 
 def register_batch(engine, batch_checksum: str, file_hashes: List[str], note: Optional[str] = None):
-    """Persist batch and per-file hashes after a successful ingest."""
+    """Remember a batch and its file hashes after we accept an upload."""
     ensure_batches_table(engine)
     with engine.begin() as conn:
         conn.execute(
@@ -55,8 +51,8 @@ def register_batch(engine, batch_checksum: str, file_hashes: List[str], note: Op
 
 def check_microscopy_duplicate(engine, batch_checksum: str, file_hashes: List[str], overlap_threshold: float = DEFAULT_OVERLAP_THRESHOLD) -> Optional[str]:
     """
-    Return a duplicate reason string if this batch/files are already ingested; otherwise None.
-    Checks batch hash, per-file hash, and strong overlap against stored batches.
+    Tell us why this upload looks like a repeat (or return None if it's fresh).
+    Checks batch hash, per-file hash, and high-overlap batches.
     """
     ensure_batches_table(engine)
     with engine.connect() as conn:

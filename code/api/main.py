@@ -1,12 +1,14 @@
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from code.api.routes_data import router as data_router
-from code.api.routes_microscopy import router as microscopy_router
-from code.api.routes_region_counts import router as region_counts_router
-from code.api.scrna import router as scrna_router
+from code.api.routes import (
+    data_router,
+    microscopy_router,
+    region_counts_router,
+    scrna_router,
+)
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 

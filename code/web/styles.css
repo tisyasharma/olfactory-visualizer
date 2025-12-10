@@ -31,9 +31,9 @@ body{
 
 /* Hero */
 .hero{ padding-top:96px; padding-bottom:24px; background:var(--paper-alt) }
-.container{ max-width:1200px; margin:0 auto; padding:0 16px }
-.container--wide{ max-width:1200px; }
-@media(min-width:1400px){ .container--wide{ max-width:1200px; } }
+.container{ max-width:1600px; margin:0 auto; padding:0 20px }
+.container--wide{ max-width:1600px; }
+@media(min-width:1600px){ .container--wide{ max-width:1600px; } }
 .grid{ display:grid; grid-template-columns:1fr; gap:24px }
 @media(min-width:960px){ .grid{ grid-template-columns: 7fr 5fr } }
 .col{ align-self:center }
@@ -119,6 +119,87 @@ h2,h3,h4{ margin:6px 0 }
   border:1px solid var(--border);
   border-radius:12px;
   color:#475569;
+}
+
+/* Rabies Cleveland plot layout */
+.rabies-layout{
+  display:grid;
+  grid-template-columns:360px 1fr;
+  gap:28px;
+}
+.rabies-sidebar{
+  background:var(--surface-subtle);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px;
+  height:100%;
+  overflow:auto;
+}
+.sidebar-block{ margin-bottom:16px; }
+.sidebar-label{ display:block; font-weight:600; color:var(--text-strong); margin-bottom:6px; }
+.sidebar-radio{ display:block; font-weight:500; color:var(--text-muted); margin:4px 0; }
+.sidebar-radio input{ margin-right:8px; }
+.rabies-sidebar input[type="search"], .rabies-sidebar select{
+  width:100%;
+  padding:8px 10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  font-family:var(--font);
+}
+.region-dropdown{ position:relative; }
+.region-list{
+  position:relative;
+  width:100%;
+  max-height:320px;
+  overflow:auto;
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:8px;
+  background:#fff;
+  box-shadow:none;
+  display:block;
+  font-size:13px;
+}
+.region-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:4px 6px;
+  border-radius:8px;
+  color:var(--text-muted);
+}
+.region-item:hover{ background:var(--surface-subtle); }
+.rabies-main{ position:relative; }
+.dotplot-container{ width:100%; min-height:420px; }
+.dotplot-grid{ display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+.dotplot-subtitle{ font-weight:600; color:var(--text-muted); margin-bottom:8px; }
+.tooltip{
+  position:absolute;
+  pointer-events:none;
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:8px 10px;
+  color:var(--text-strong);
+  box-shadow:0 10px 30px rgba(0,0,0,0.08);
+  font-size:12px;
+  z-index:10;
+}
+.sidebar-actions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-top:8px;
+}
+.sidebar-actions__buttons{
+  display:flex;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.rabies-status{
+  margin-top:10px;
+  color:#6b7280;
 }
 /* Footer */
 .footer{ text-align:center; color:#6b7280; font-size:14px; padding:40px 0 }

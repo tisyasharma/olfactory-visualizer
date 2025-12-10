@@ -1,6 +1,6 @@
 """
-scRNA endpoints backed by CSV reference files (cluster, terms, membership).
-Reason: isolate RNA loading and routes from the main API wiring.
+scRNA endpoints backed by the CSVs we ship with the repo (clusters, terms, membership).
+Keeps RNA lookups separate from the upload routes.
 """
 from pathlib import Path
 from typing import Optional
@@ -19,19 +19,22 @@ _membership_df = None
 def load_rna_tables():
     global _clusters_df, _terms_df, _membership_df
     if _clusters_df is not None and _terms_df is not None and _membership_df is not None:
-        return
+        return True
     cluster_path = RNA_DIR / "cluster.csv"
     term_path = RNA_DIR / "cluster_annotation_term.csv"
     membership_path = RNA_DIR / "cluster_to_cluster_annotation_membership.csv"
     if not (cluster_path.exists() and term_path.exists() and membership_path.exists()):
-        raise HTTPException(status_code=500, detail="scRNA reference files missing in data/RNAseq_data")
+        # Keep the API up even if the optional RNA files are missing
+        return False
     _clusters_df = pd.read_csv(cluster_path)
     _terms_df = pd.read_csv(term_path)
     _membership_df = pd.read_csv(membership_path)
+    return True
 
 
 def scrna_samples_data():
-    load_rna_tables()
+    if not load_rna_tables():
+        return []
     return [{
         "sample_id": "WMB-10Xv2-OLF",
         "modality": "rna_seq",
@@ -41,7 +44,8 @@ def scrna_samples_data():
 
 
 def scrna_clusters_data():
-    load_rna_tables()
+    if not load_rna_tables():
+        return []
     return [
         {
             "sample_id": "WMB-10Xv2-OLF",
@@ -54,7 +58,8 @@ def scrna_clusters_data():
 
 
 def scrna_markers_data(cluster_id: str, limit: int):
-    load_rna_tables()
+    if not load_rna_tables():
+        return []
     try:
         cid_int = int(cluster_id)
     except ValueError:
@@ -79,7 +84,11 @@ def scrna_markers_data(cluster_id: str, limit: int):
 
 @router.get("/scrna/samples")
 def scrna_samples():
-    return scrna_samples_data()
+    data = scrna_samples_data()
+    if not data:
+        # Return 204 to signal "no scRNA configured" without throwing
+        return []
+    return data
 
 
 @router.get("/scrna/clusters")

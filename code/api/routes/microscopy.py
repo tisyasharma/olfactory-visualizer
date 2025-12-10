@@ -1,6 +1,6 @@
 """
-Microscopy upload and duplicate-check endpoints (RESTful).
-Routes stay thin: validation + service calls; duplicate logic lives in duplication/service modules.
+Microscopy upload + dup-check endpoints.
+Keep the route thin, let the services do the heavy lifting.
 """
 from typing import List, Optional, Union
 import tempfile
@@ -8,8 +8,6 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
-from sqlalchemy import text
-
 from code.api.deps import get_engine
 from code.api.services import uploads as upload_service
 from code.api.models import MicroscopyFile, DuplicateCheckResponse, HashesPayload
@@ -60,7 +58,7 @@ async def create_microscopy_files(
     files: List[UploadFile] = File(...),
 ):
     """
-    Accept microscopy uploads, convert to OME-Zarr, register sessions/files.
+    Take microscopy uploads, convert to OME-Zarr, and register them.
     """
     tmpdir, saved_paths = _stage_images(files)
     engine = get_engine()
@@ -96,7 +94,8 @@ async def create_microscopy_files(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-@router.post("/microscopy-files/duplicate-check", status_code=200, response_model=DuplicateCheckResponse)
+@router.post("/microscopy-files/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
+@router.post("/microscopy-files/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
 async def microscopy_files_duplicate_check(payload: Union[HashesPayload, List[str]] = Body(...)):
     # Accept either raw list or {\"hashes\": [...]} for convenience
     hashes: List[str]

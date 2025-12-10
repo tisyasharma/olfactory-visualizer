@@ -1,5 +1,5 @@
 """
-API configuration constants.
+Tiny config knobs for the API.
 """
 
 # Duplicate detection

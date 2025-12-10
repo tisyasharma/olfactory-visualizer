@@ -1,16 +1,14 @@
 """
-Shared API utilities.
-Reason: keep common helpers (DB engine, session resolution, hashing) separate from route wiring.
+Grab-bag of API helpers (engine/session hashing stuff) so the route files stay lighter.
 """
 import hashlib
 from pathlib import Path
 from typing import Optional
 
-from fastapi import HTTPException
 from sqlalchemy import text
 
 from code.database.connect import get_engine
-from code.database.etl.utils import get_or_create_session_id, load_table, clean_numeric
+from code.database.etl.utils import get_or_create_session_id
 
 
 def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id: Optional[str]) -> str:
@@ -51,6 +49,4 @@ __all__ = [
     "sha256_path",
     "fetch_all",
     "get_or_create_session_id",
-    "load_table",
-    "clean_numeric",
 ]

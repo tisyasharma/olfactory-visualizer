@@ -26,3 +26,21 @@ class RegionCountSummary(BaseModel):
 
 class HashesPayload(BaseModel):
     hashes: List[str]
+
+
+class RegionLoadSummary(BaseModel):
+    region: str
+    hemisphere: str
+    genotype: Optional[str] = None
+    mean_load_fraction: Optional[float] = None
+    sem_load_fraction: Optional[float] = None
+    n_mice: int = 0
+
+
+class RegionLoadByMouse(BaseModel):
+    subject_id: str
+    region: str
+    hemisphere: str
+    load: Optional[float] = None
+    load_fraction: Optional[float] = None
+    genotype: Optional[str] = None

@@ -124,8 +124,42 @@
 
       <!-- Rabies Tab -->
       <div id="rabiesTab" class="tabpanel is-active" role="tabpanel" aria-labelledby="rabiesTabBtn" data-aos="fade-up">
-        <div class="viz-holder">
-          <div class="viz-holder__title">Dataset visualization</div>
+        <div class="rabies-layout card">
+          <aside class="rabies-sidebar">
+            <div class="sidebar-block region-dropdown">
+              <label class="sidebar-label">Search & Select Regions
+                <input id="rabiesRegionSearch" type="search" placeholder="Type to search/add..." autocomplete="off" />
+              </label>
+              <div id="rabiesRegionList" class="region-list"></div>
+              <div class="sidebar-actions">
+                <span id="rabiesSelectedCount" class="pill pill--muted">0 selected</span>
+                <div class="sidebar-actions__buttons">
+                  <button id="rabiesResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
+                  <button id="rabiesClearBtn" class="btn btn--mini btn--ghost" type="button">Clear</button>
+                </div>
+              </div>
+            </div>
+            <div class="sidebar-block">
+              <div class="sidebar-label">Group by</div>
+              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="genotype" checked /> Genotype (vGLUT1 vs vGAT)</label>
+              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="subject" /> Subject (individual animals)</label>
+            </div>
+          </aside>
+          <div class="rabies-main">
+            <div class="viz-holder__title">vGLUT1 vs vGAT Projections (Rabies)</div>
+            <div class="dotplot-grid">
+              <div>
+                <div class="dotplot-subtitle">Ipsilateral</div>
+                <div id="rabiesDotPlotIpsi" class="dotplot-container"></div>
+              </div>
+              <div>
+                <div class="dotplot-subtitle">Contralateral</div>
+                <div id="rabiesDotPlotContra" class="dotplot-container"></div>
+              </div>
+            </div>
+            <div id="rabiesTooltip" class="tooltip" hidden></div>
+            <div id="rabiesStatus" class="rabies-status muted small">Loading rabies data…</div>
+          </div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 """
-Quantification CSV upload and duplicate-check endpoints (RESTful).
+Quantification CSV uploads + duplicate checks.
 """
 from typing import List, Optional
 import tempfile
@@ -28,7 +28,7 @@ async def create_region_counts(
     files: List[UploadFile] = File(...),
 ):
     """
-    Accept quantification CSV uploads and load them into region_counts.
+    Take quant CSVs and push them into region_counts.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -102,7 +102,8 @@ async def create_region_counts(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-@router.post("/region-counts/duplicate-check", status_code=200, response_model=DuplicateCheckResponse)
+@router.post("/region-counts/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
+@router.post("/region-counts/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
 async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
     if not files:
         return {"duplicate": False, "message": "No files provided"}
