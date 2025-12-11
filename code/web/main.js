@@ -110,8 +110,8 @@ const rabiesState = {
   regionTreeCached: false,
   regionNameToAcronym: {}
 };
-// Plot margins (balanced to keep both charts same width)
-const rabiesPlotMargins = { top: 50, right: 0, bottom: 44, left: 50 };
+// Plot margins (balanced to keep both charts same width; extra left for labels)
+const rabiesPlotMargins = { top: 36, right: 0, bottom: 44, left: 70 };
 
 const regionSearch = document.getElementById('rabiesRegionSearch');
 const regionListEl = document.getElementById('rabiesRegionList');
@@ -120,6 +120,12 @@ const groupRadios = document.querySelectorAll('input[name="rabiesGroupBy"]');
 const rabiesResetBtn = document.getElementById('rabiesResetBtn');
 const rabiesClearBtn = document.getElementById('rabiesClearBtn');
 const rabiesStatus = document.getElementById('rabiesStatus');
+const rabiesMouseCountEl = document.getElementById('rabiesMouseCount');
+const zoomLevelEl = document.getElementById('zoomLevel');
+const resetZoomBtn = document.getElementById('resetZoomBtn');
+let rabiesPlotRefs = [];
+let rabiesZoomBehavior = null;
+let rabiesZoomTransform = d3.zoomIdentity;
 
 regionSearch?.addEventListener('input', (e) => {
   rabiesState.search = e.target.value.toLowerCase();
@@ -159,6 +165,12 @@ function setRabiesStatus(msg, tone='muted'){
   if(!rabiesStatus) return;
   rabiesStatus.textContent = msg || '';
   rabiesStatus.className = `rabies-status ${tone}`;
+}
+
+function setRabiesMouseCount(n){
+  if(!rabiesMouseCountEl) return;
+  const val = Number.isFinite(n) && n > 0 ? n : '–';
+  rabiesMouseCountEl.textContent = val;
 }
 
 // Render the rabies region checklist based on search and selection. 
@@ -218,6 +230,9 @@ async function loadRabiesData(){
     const contra = clean(contraRaw);
     rabiesState.dataByHemi = { ipsilateral: ipsi, contralateral: contra };
     const allData = [...ipsi, ...contra];
+    // Unique mouse count across both hemispheres
+    const mouseCount = new Set(allData.map(d => d.subject_id).filter(Boolean)).size;
+    setRabiesMouseCount(mouseCount);
     // Seed region names from the data; may be overridden by the tree for stable acronyms.
     const regionSet = new Set(allData.map(d => d.region));
     defaultRabiesRegions.forEach(r => regionSet.add(r));
@@ -271,18 +286,19 @@ function drawRabiesDotPlot(){
   const regions = getOrderedRabiesRegions();
   const ipsiData = buildRabiesChartData('ipsilateral', regions);
   const contraData = buildRabiesChartData('contralateral', regions);
-  const domainMax = Math.max(
-    100,
-    d3.max([...ipsiData, ...contraData], d => (d.valuePerc + d.semPerc) || d.valuePerc || 0) || 0
-  );
+  const peakVal = d3.max([...ipsiData, ...contraData], d => (d.valuePerc + d.semPerc) || d.valuePerc || 0) || 0;
+  const domainMax = peakVal > 0 ? peakVal * 1.08 : 1; // small headroom past the max point
   const rows = Math.max(regions.length, 9);
   const rowSpacing = 32;
-  const innerSide = Math.max(520, rows * rowSpacing); // square inner plotting area (height == width)
-  drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi', ipsiData, regions, domainMax, innerSide);
-  drawRabiesSingle('contralateral', '#rabiesDotPlotContra', contraData, regions, domainMax, innerSide);
+  const innerSide = Math.max(500, rows * rowSpacing); // square inner plotting area (height == width)
+  rabiesPlotRefs = [];
+  rabiesPlotRefs.push(drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi', ipsiData, regions, domainMax, innerSide));
+  rabiesPlotRefs.push(drawRabiesSingle('contralateral', '#rabiesDotPlotContra', contraData, regions, domainMax, innerSide));
+  initSharedZoom();
 }
 
 // Build chart-ready rows for a hemisphere, respecting current grouping.
+// Note: We plot relative signal (load_fraction) because absolute cell counts/starters are not available in the source CSVs.
 function buildRabiesChartData(hemiKey, regions){
   const valuesSource = rabiesState.dataByHemi[hemiKey] || [];
   if(!regions.length) return [];
@@ -378,9 +394,9 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     container.append('div').attr('class','muted').text('No data to display.');
     return;
   }
-  // Use the same margin for both plots so widths match (right plot still hides its y labels).
+  // Use identical margins so both plots occupy the same width; right plot hides its y labels.
   const margin = rabiesPlotMargins;
-  const legendSpace = 16; // space to allow legend inside top-right without clipping
+  const legendSpace = 24; // space to allow legend inside top-right without clipping
   const plotLeft = margin.left;
   const plotTop = margin.top;
   const plotRight = plotLeft + innerSide;
@@ -393,15 +409,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .attr('viewBox', `0 0 ${width} ${height}`)
     .attr('preserveAspectRatio', 'xMidYMid meet')
     .style('width','100%')
-    .style('height','100%');
-
-  // Light plot background for grounding.
-  svg.append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide)
-    .attr('fill', '#f8fafc');
+    .style('height','auto');
 
   const xPadding = 8; // inset x-axis ticks slightly from the plot border
   const xRangeStart = plotLeft + xPadding;
@@ -427,14 +435,34 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
   const yGrid = d3.axisLeft(y).tickSize(-(innerSide)).tickFormat(() => '');
   const yAxisRight = d3.axisRight(y).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
 
+  const clipId = `clip-${hemiKey}-${Math.random().toString(36).slice(2,7)}`;
+  const defs = svg.append('defs');
+  defs.append('clipPath')
+    .attr('id', clipId)
+    .append('rect')
+    .attr('x', plotLeft)
+    .attr('y', plotTop)
+    .attr('width', innerSide)
+    .attr('height', innerSide);
+
+  const plotGroup = svg.append('g').attr('clip-path', `url(#${clipId})`);
+
+  // Light plot background for grounding.
+  plotGroup.append('rect')
+    .attr('x', plotLeft)
+    .attr('y', plotTop)
+    .attr('width', innerSide)
+    .attr('height', innerSide)
+    .attr('fill', '#f8fafc');
+
   // Gridlines behind points.
-  svg.append('g')
+  const xGridGroup = plotGroup.append('g')
     .attr('transform', `translate(0,${plotBottom})`)
     .call(xGrid)
     .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
     .call(g => g.selectAll('text').remove())
     .call(g => g.selectAll('.domain').remove());
-  svg.append('g')
+  plotGroup.append('g')
     .attr('transform', `translate(${plotLeft},0)`)
     .call(yGrid)
     .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
@@ -452,8 +480,9 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .attr('stroke-width', 1.4);
 
   // Error bars: mean +/- SEM (only meaningful for aggregated genotype view)
+  let errBars = null;
   if(rabiesState.groupBy === 'genotype'){
-    svg.append('g')
+    errBars = plotGroup.append('g')
       .selectAll('line.err')
       .data(chartData)
       .enter()
@@ -470,7 +499,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
   // Points (different shapes per genotype; Vglut1 rotated square, Vgat circle)
   const pointSize = 140;
   const symbolForGroup = (group) => (group === 'Vglut1' ? d3.symbolSquare : d3.symbolCircle);
-  svg.append('g')
+  const points = plotGroup.append('g')
     .selectAll('path.point')
     .data(chartData)
     .enter()
@@ -482,13 +511,13 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
       return `translate(${x(d.valuePerc)},${y(d.regionLabel)}) rotate(${rotate})`;
     })
     .attr('fill', d => color(d.group))
-    .attr('fill-opacity', 0.12)
+    .attr('fill-opacity', 0.35)
     .attr('stroke', d => color(d.group))
     .attr('stroke-width', 2)
     .on('mouseenter', (event, d) => showTooltip(event, d))
     .on('mouseleave', hideTooltip);
 
-  svg.append('g')
+  const xAxisG = svg.append('g')
     .attr('transform', `translate(0,${plotBottom})`)
     .call(xAxis)
     .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
@@ -500,7 +529,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
       .attr('fill', axisTextColor)
       .attr('text-anchor', 'middle')
       .attr('font-size', 12)
-      .text('Load fraction (%) per mouse normalized'));
+      .text('Relative Input Strength (% of Total Signal)'));
   svg.append('g')
     .attr('transform', `translate(0,${plotTop})`)
     .call(xAxisTop)
@@ -517,7 +546,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .attr('fill', axisTextColor)
     .attr('text-anchor', 'end')
     .attr('x', -10)
-    .attr('opacity', hemiKey === 'ipsilateral' ? 1 : 0); // show labels only on left plot
+    .attr('opacity', 1); // show labels on both plots
   svg.append('g')
     .attr('transform', `translate(${plotRight},0)`)
     .call(yAxisRight)
@@ -526,38 +555,124 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .call(g => g.selectAll('text').remove());
 
   // Legend (nested inside plot area, top-right)
-  const legendInset = 62; // keep legend box fully inside the plot area
-  const legend = svg.append('g')
-    .attr('transform', `translate(${plotRight - legendInset}, ${plotTop + 12})`);
-  legend.append('rect')
-    .attr('x', -10)
-    .attr('y', -8)
-    .attr('width', 67)
-    .attr('height', 42)
+  // Legend (nested inside plot area, top-right) with balanced padding
+  const legendBox = svg.append('g');
+  const legendItems = [
+    { label: hemiKey === 'ipsilateral' ? 'Vglut1 Ipsi' : 'Vglut1 Contra', colorKey:'Vglut1', shape:d3.symbolSquare, rotate:45 },
+    { label: hemiKey === 'ipsilateral' ? 'Vgat Ipsi' : 'Vgat Contra', colorKey:'Vgat', shape:d3.symbolCircle, rotate:0 }
+  ];
+  const legendRowHeight = 24;
+  const legendWidth = 130;
+  const legendPaddingX = 16;
+  const legendPaddingY = 10;
+  const legendHeight = legendItems.length * legendRowHeight + legendPaddingY * 2;
+  const legendX = plotRight - legendWidth - 16;
+  const legendY = plotTop + 16;
+
+  legendBox.attr('transform', `translate(${legendX}, ${legendY})`);
+
+  legendBox.append('rect')
+    .attr('width', legendWidth)
+    .attr('height', legendHeight)
     .attr('rx', 8)
     .attr('fill', '#f8fafc')
     .attr('stroke', '#dfe3eb')
     .attr('stroke-width', 1);
-  const legendItems = [
-    { label:'Vglut1', shape:d3.symbolSquare, rotate:45 },
-    { label:'Vgat', shape:d3.symbolCircle, rotate:0 }
-  ];
+
   legendItems.forEach((item, idx) => {
-    const row = legend.append('g').attr('transform', `translate(0, ${idx * 18})`);
+    const rowY = legendPaddingY + legendRowHeight / 2 + idx * legendRowHeight;
+    const row = legendBox.append('g').attr('transform', `translate(${legendPaddingX}, ${rowY})`);
+    
     row.append('path')
       .attr('d', d3.symbol().type(item.shape).size(120)())
-      .attr('fill', color(item.label))
-      .attr('fill-opacity', 0.15)
-      .attr('stroke', color(item.label))
+      .attr('fill', color(item.colorKey))
+      .attr('fill-opacity', 0.35)
+      .attr('stroke', color(item.colorKey))
       .attr('stroke-width', 2)
-      .attr('transform', `translate(0,4) rotate(${item.rotate || 0})`);
+      .attr('transform', `rotate(${item.rotate || 0})`);
+      
     row.append('text')
-      .attr('x', 14)
-      .attr('y', 7)
+      .attr('x', 20)
+      .attr('y', 0)
       .text(item.label)
-      .attr('fill','#374151')
-      .attr('font-size',12);
+      .attr('fill', '#374151')
+      .attr('font-size', 12)
+      .attr('dominant-baseline', 'middle');
   });
+
+  return {
+    hemiKey,
+    svg,
+    x0: x,
+    y,
+    xAxis,
+    xGrid,
+    xAxisG,
+    xGridGroup,
+    errBars,
+    points,
+    innerSide,
+    plotLeft,
+    plotRight,
+    height
+  };
+}
+
+function initSharedZoom(){
+  if(!rabiesPlotRefs.length) return;
+  const ref0 = rabiesPlotRefs[0];
+  if(!rabiesZoomBehavior){
+    rabiesZoomBehavior = d3.zoom()
+      .scaleExtent([1,10])
+      .extent([[ref0.plotLeft, 0], [ref0.plotRight, ref0.height]])
+      .translateExtent([[ref0.plotLeft, 0], [ref0.plotRight, ref0.height]])
+      .on('zoom', (event) => {
+        rabiesZoomTransform = event.transform;
+        applySharedZoom();
+      });
+    if(resetZoomBtn){
+      resetZoomBtn.addEventListener('click', () => {
+        rabiesZoomTransform = d3.zoomIdentity;
+        rabiesPlotRefs.forEach(ref => {
+          ref.svg.transition().duration(750).call(rabiesZoomBehavior.transform, rabiesZoomTransform);
+        });
+        updateZoomLevel();
+      });
+    }
+  }
+  rabiesPlotRefs.forEach(ref => {
+    ref.svg.call(rabiesZoomBehavior);
+    ref.svg.call(rabiesZoomBehavior.transform, rabiesZoomTransform);
+  });
+  updateZoomLevel();
+}
+
+function applySharedZoom(){
+  rabiesPlotRefs.forEach(ref => {
+    const t = d3.zoomIdentity.translate(rabiesZoomTransform.x, 0).scale(rabiesZoomTransform.k);
+    const zx = t.rescaleX(ref.x0);
+    ref.xAxisG.call(ref.xAxis.scale(zx));
+    ref.xGridGroup.call(ref.xGrid.scale(zx))
+      .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
+      .call(g => g.selectAll('text').remove())
+      .call(g => g.selectAll('.domain').remove());
+    if(ref.errBars){
+      ref.errBars
+        .attr('x1', d => zx(Math.max(0, d.valuePerc - d.semPerc)))
+        .attr('x2', d => zx(d.valuePerc + d.semPerc));
+    }
+    ref.points.attr('transform', d => {
+      const rotate = d.group === 'Vglut1' ? 45 : 0;
+      return `translate(${zx(d.valuePerc)},${ref.y(d.regionLabel)}) rotate(${rotate})`;
+    });
+  });
+  updateZoomLevel();
+}
+
+function updateZoomLevel(){
+  if(!zoomLevelEl) return;
+  const k = rabiesZoomTransform?.k || 1;
+  zoomLevelEl.textContent = `${k.toFixed(1)}x`;
 }
 
 /* Show the floating tooltip for rabies dots. */
@@ -565,8 +680,13 @@ function showTooltip(event, d){
   if(!tooltip) return;
   tooltip.hidden = false;
   const semTxt = d.semPerc ? d.semPerc.toFixed(2) + '%' : 'NA';
-  const label = rabiesState.groupBy === 'genotype' ? `${d.group} (mean +/- sem)` : d.group;
-  tooltip.innerHTML = `<strong>${d.region}</strong><br/>${label}<br/>Mean load fraction: ${d.valuePerc.toFixed(2)}%<br/>SEM: ${semTxt}<br/>n: ${d.n || 'NA'}`;
+  const groupTxt = rabiesState.groupBy === 'genotype' ? `${d.group} (mean ± sem)` : d.group;
+  tooltip.innerHTML = `
+    <strong>${d.region}</strong><br/>
+    ${groupTxt}<br/>
+    Input Share: ${d.valuePerc.toFixed(2)}%${rabiesState.groupBy === 'genotype' ? ` (SEM: ${semTxt}, n: ${d.n || 'NA'})` : ''}<br/>
+    <span style="color:#6b7280;font-size:11px;">(Signal area normalized to total brain-wide input)</span>
+  `;
   const rect = tooltip.getBoundingClientRect();
   tooltip.style.left = `${event.pageX - rect.width/2}px`;
   tooltip.style.top = `${event.pageY - rect.height - 10}px`;

@@ -36,13 +36,14 @@
       <div class="col" data-aos="fade-up">
         <p class="kicker">Tisya Sharma · Capstone</p>
         <h1>Olfactory Data Visualizer</h1>
+        <h2 class="hero-subtitle">The Interhemispheric Connectivity of <br>the Anterior Olfactory Nucleus</h2>
         <p class="lede">
           Dashboard for fluorescence‑based circuit tracing. <!-- regional AON expression temporarily omitted -->
         </p>
-        <div class="legend">
-          <span class="dot" style="--c:var(--accent1)"></span> Afferent/Tracing
-          <span class="dot" style="--c:var(--accent2)"></span> Injection/Expression
-          <span class="dot" style="--c:var(--accent3)"></span> Regional Summaries
+        <div class="legend legend--stacked">
+          <div class="legend__item"><span class="dot" style="--c:var(--accent1)"></span><span>Input Mapping: Monosynaptic Rabies Tracing</span></div>
+          <div class="legend__item"><span class="dot" style="--c:var(--accent2)"></span><span>Circuit Annatomy: Dual-Viral Tracing</span></div>
+          <div class="legend__item"><span class="dot" style="--c:var(--accent3)"></span><span>Molecular Profiling: Single-Cell RNA Sequencing</span></div>
         </div>
       </div>
     </div>
@@ -123,7 +124,7 @@
             <div class="abstract-plain">
               <div class="abstract-plain__head">
                 <div class="abstract-plain__meta">
-                  <p class="kicker">Monosynaptic Input Mapping</p>
+                  <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span></span>  Input Mapping: Monosynaptic Rabies Tracing</p>
                   <div class="abstract-plain__title-row">
                     <h2 class="abstract-plain__title">Monosynaptic Input Mapping</h2>
                     <button id="rabiesAbstractToggle" class="abstract-plain__toggle" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">[+] View Experimental Rationale</button>
@@ -131,14 +132,21 @@
                 </div>
               </div>
               <div id="rabiesAbstractBody" class="abstract-plain__body" hidden>
-                <div class="abstract-plain__text">
+                <div class="muted small">
                   <p>
                     To determine the connectivity logic of the AON, we utilized Monosynaptic Rabies Tracing. This approach allows for the retrograde labeling of direct presynaptic inputs onto defined starter populations. By targeting vGLUT1-Cre (excitatory) and vGAT-Cre (inhibitory) neurons, we quantified the convergence of inputs arising from the contralateral hemisphere, olfactory bulb, and top-down cortical structures.
                   </p>
                 </div>
-                <div class="abstract-plain__meta">
-                  Virus: EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=10 Mice
+                <div class="muted small">
+                  Virus: EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=<span id="rabiesMouseCount">–</span> mice
                 </div>
+              </div>
+            </div>
+            <div class="zoom-controls-row">
+              <div class="zoom-controls">
+                <span id="zoomLevel" class="zoom-controls__level">1.0x</span>
+                <span class="zoom-controls__divider">|</span>
+                <button id="resetZoomBtn" class="zoom-controls__btn" type="button">⟲ Reset</button>
               </div>
             </div>
             <div class="figure-panel">
