@@ -110,7 +110,8 @@ const rabiesState = {
   regionTreeCached: false,
   regionNameToAcronym: {}
 };
-const rabiesPlotMargins = { top: 12, right: 28, bottom: 44, left: 220 };
+// Plot margins (balanced to keep both charts same width)
+const rabiesPlotMargins = { top: 50, right: 0, bottom: 44, left: 50 };
 
 const regionSearch = document.getElementById('rabiesRegionSearch');
 const regionListEl = document.getElementById('rabiesRegionList');
@@ -152,12 +153,7 @@ rabiesClearBtn?.addEventListener('click', () => {
   rabiesState.selectedRegions = new Set();
   renderRegionList();
   drawRabiesDotPlot();
-  updateSelectedCount();
 });
-
-function updateSelectedCount(){
-  // kept for potential future use; currently not showing a count badge
-}
 
 function setRabiesStatus(msg, tone='muted'){
   if(!rabiesStatus) return;
@@ -169,11 +165,19 @@ function setRabiesStatus(msg, tone='muted'){
 function renderRegionList(){
   if(!regionListEl) return;
   regionListEl.innerHTML = '';
+  // Highlight only regions with signal in current rabies data (ipsi or contra).
+  const signalRegions = new Set();
+  ['ipsilateral','contralateral'].forEach(side => {
+    (rabiesState.dataByHemi?.[side] || [])
+      .filter(d => typeof d.load_fraction === 'number' && d.load_fraction > 0)
+      .forEach(d => signalRegions.add(d.region));
+  });
   const filtered = rabiesState.regions.filter(r => r.toLowerCase().includes(rabiesState.search));
   filtered.forEach(region => {
     const id = `reg-${region.replace(/\W+/g,'-')}`;
     const wrapper = document.createElement('label');
-    wrapper.className = 'region-item';
+    const hasSignal = signalRegions.has(region);
+    wrapper.className = `region-item${hasSignal ? ' region-item--has-signal' : ''}`;
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.id = id;
@@ -260,7 +264,6 @@ function applyDefaultRabiesSelection(){
   });
   // Only keep those matches; no auto-fill with other regions
   rabiesState.selectedRegions = new Set(matched);
-  updateSelectedCount();
 }
 
 /* Draw both ipsilateral and contralateral rabies dot plots. */
@@ -375,8 +378,9 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     container.append('div').attr('class','muted').text('No data to display.');
     return;
   }
-  const margin = rabiesPlotMargins; // shared margins keep sizing in sync
-  const legendSpace = 48; // space to allow legend outside top-right
+  // Use the same margin for both plots so widths match (right plot still hides its y labels).
+  const margin = rabiesPlotMargins;
+  const legendSpace = 16; // space to allow legend inside top-right without clipping
   const plotLeft = margin.left;
   const plotTop = margin.top;
   const plotRight = plotLeft + innerSide;
@@ -399,9 +403,12 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .attr('height', innerSide)
     .attr('fill', '#f8fafc');
 
+  const xPadding = 8; // inset x-axis ticks slightly from the plot border
+  const xRangeStart = plotLeft + xPadding;
+  const xRangeEnd = plotRight - xPadding;
   const x = d3.scaleLinear()
     .domain([0, domainMax || Math.max(100, d3.max(chartData, d => d.valuePerc + d.semPerc) || 0)])
-    .range([plotLeft, plotRight]);
+    .range([xRangeStart, xRangeEnd]);
 
   const regionLabels = regions.map(r => regionAcronym(r));
   const y = d3.scalePoint()
@@ -460,17 +467,22 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
       .attr('stroke-width', 2);
   }
 
-  // Points
+  // Points (different shapes per genotype; Vglut1 rotated square, Vgat circle)
+  const pointSize = 140;
+  const symbolForGroup = (group) => (group === 'Vglut1' ? d3.symbolSquare : d3.symbolCircle);
   svg.append('g')
-    .selectAll('circle')
+    .selectAll('path.point')
     .data(chartData)
     .enter()
-    .append('circle')
-    .attr('cx', d => x(d.valuePerc))
-    .attr('cy', d => y(d.regionLabel))
-    .attr('r', 6)
+    .append('path')
+    .attr('class','point')
+    .attr('d', d => d3.symbol().size(pointSize).type(symbolForGroup(d.group))())
+    .attr('transform', d => {
+      const rotate = d.group === 'Vglut1' ? 45 : 0;
+      return `translate(${x(d.valuePerc)},${y(d.regionLabel)}) rotate(${rotate})`;
+    })
     .attr('fill', d => color(d.group))
-    .attr('fill-opacity', 0.1)
+    .attr('fill-opacity', 0.12)
     .attr('stroke', d => color(d.group))
     .attr('stroke-width', 2)
     .on('mouseenter', (event, d) => showTooltip(event, d))
@@ -483,7 +495,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2))
     .call(g => g.selectAll('text').attr('fill', axisTextColor).attr('font-size', 11.5))
     .call(g => g.append('text')
-      .attr('x', plotLeft + (plotRight - plotLeft)/2)
+      .attr('x', xRangeStart + (xRangeEnd - xRangeStart)/2)
       .attr('y', 36)
       .attr('fill', axisTextColor)
       .attr('text-anchor', 'middle')
@@ -513,21 +525,38 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
     .call(g => g.selectAll('line').remove())
     .call(g => g.selectAll('text').remove());
 
-  // Legend
+  // Legend (nested inside plot area, top-right)
+  const legendInset = 62; // keep legend box fully inside the plot area
   const legend = svg.append('g')
-    .attr('transform', `translate(${plotRight - 4}, ${plotTop - 12})`);
+    .attr('transform', `translate(${plotRight - legendInset}, ${plotTop + 12})`);
   legend.append('rect')
-    .attr('x', -6)
-    .attr('y', -6)
-    .attr('width', 64)
-    .attr('height', 32)
+    .attr('x', -10)
+    .attr('y', -8)
+    .attr('width', 67)
+    .attr('height', 42)
     .attr('rx', 8)
     .attr('fill', '#f8fafc')
-    .attr('stroke', '#e2e8f0');
-  ['Vglut1','Vgat'].forEach((label, idx) => {
-    const row = legend.append('g').attr('transform', `translate(4, ${idx * 16})`);
-    row.append('rect').attr('width',14).attr('height',14).attr('rx',3).attr('fill', color(label)).attr('fill-opacity',0.15).attr('stroke', color(label));
-    row.append('text').attr('x', 20).attr('y',11).text(label).attr('fill','#374151').attr('font-size',12);
+    .attr('stroke', '#dfe3eb')
+    .attr('stroke-width', 1);
+  const legendItems = [
+    { label:'Vglut1', shape:d3.symbolSquare, rotate:45 },
+    { label:'Vgat', shape:d3.symbolCircle, rotate:0 }
+  ];
+  legendItems.forEach((item, idx) => {
+    const row = legend.append('g').attr('transform', `translate(0, ${idx * 18})`);
+    row.append('path')
+      .attr('d', d3.symbol().type(item.shape).size(120)())
+      .attr('fill', color(item.label))
+      .attr('fill-opacity', 0.15)
+      .attr('stroke', color(item.label))
+      .attr('stroke-width', 2)
+      .attr('transform', `translate(0,4) rotate(${item.rotate || 0})`);
+    row.append('text')
+      .attr('x', 14)
+      .attr('y', 7)
+      .text(item.label)
+      .attr('fill','#374151')
+      .attr('font-size',12);
   });
 }
 
@@ -546,6 +575,8 @@ function showTooltip(event, d){
 function hideTooltip(){
   if(tooltip) tooltip.hidden = true;
 }
+
+/* Show tooltip for y-axis labels with full region name. */
 
 
 async function updateRabiesCharts(params){
