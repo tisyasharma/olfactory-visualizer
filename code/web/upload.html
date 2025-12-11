@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Upload Center · AON Connectome Atlas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet" />
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav__inner">
+      <a href="index.html" class="brand">Olfactory DV</a>
+      <div class="nav__links">
+        <a href="index.html">Datasets</a>
+        <a href="upload.html" class="is-active">Upload</a>
+        <a href="napari.html">Napari Viewer</a>
+      </div>
+    </div>
+  </nav>
+
+  <section id="upload" class="section" style="padding-top:96px;">
+    <div class="container container--wide" data-aos="fade-up">
+      <div class="section__head">
+        <div>
+          <p class="kicker">Uploads</p>
+          <h3>Upload Center</h3>
+          <p id="uploadGuidance" class="upload-hint">To enable Register: Select a modality | Choose a date | Add microscopy images | Add bilateral CSV | Add ipsilateral CSV | Add contralateral CSV</p>
+        </div>
+      </div>
+      <div class="card upload-card">
+        <div class="upload-row">
+          <div class="upload-grid upload-grid--stack">
+            <label>Modality
+              <select id="uploadModality">
+                <option value="" disabled selected>Select modality</option>
+                <option value="rabies">Rabies Injection</option>
+                <option value="double_injection">Double Injection</option>
+                <option value="scrnaseq">RNA Sequencing Data</option>
+              </select>
+            </label>
+            <label>Date Run
+              <input id="uploadDate" type="date" />
+            </label>
+            <label>Comments (optional)
+              <input id="uploadComment" type="text" placeholder="Notes for this upload" />
+            </label>
+            <div class="upload-actions">
+              <button id="registerBtn" class="btn">Register Experiment</button>
+              <button id="clearBtn" class="btn btn--clear">Clear</button>
+            </div>
+            <div id="dupNotice" class="note note--error" hidden></div>
+          </div>
+
+          <div class="uploader uploader--compact" id="dropzone" aria-label="File dropzone">
+            <input id="fileInput" type="file" multiple aria-label="Upload files" />
+            <div class="uploader__body">
+              <div class="uploader__icon">⬆</div>
+              <div class="uploader__text">
+                <strong>Drag & drop</strong>
+                <div>OR</div>
+                <div>Use the buttons below to add images and each hemisphere CSV.</div>
+                <div class="uploader__hint">PNG/JPG/TIFF slices — one mouse/session per upload</div>
+              </div>
+            </div>
+            <div class="uploader__actions">
+              <div class="counts-upload counts-upload--inline">
+                <div class="counts-upload__head">
+                  <span class="file-list__title">Quantification CSVs (upload together — bilateral, ipsilateral, contralateral)</span>
+                </div>
+                <div class="counts-upload__controls">
+                  <button class="btn btn--mini" id="addImagesBtn">Add Images</button>
+                  <button class="btn btn--mini" id="addCsvBilateral">Add Bilateral CSV</button>
+                  <button class="btn btn--mini" id="addCsvLeft">Add Ipsilateral CSV</button>
+                  <button class="btn btn--mini" id="addCsvRight">Add Contralateral CSV</button>
+                  <input id="csvInputBilateral" type="file" accept=".csv" hidden />
+                  <input id="csvInputLeft" type="file" accept=".csv" hidden />
+                  <input id="csvInputRight" type="file" accept=".csv" hidden />
+                </div>
+                <div id="csvList" class="file-list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <details id="imageListWrap" class="file-list file-list--collapsible" open>
+          <summary class="file-list__summary">Image files</summary>
+          <div id="imageList" class="file-list__body"></div>
+        </details>
+        <div id="uploadSpinner" class="spinner" hidden>
+          <span class="spinner__dot" aria-hidden="true"></span>
+          <span class="spinner__label">Uploading…</span>
+        </div>
+        <div class="note note--ok" id="uploadStatus" hidden>Ready.</div>
+        <div class="note" id="uploadWarning" hidden></div>
+        <div class="expected-note">
+          <p class="muted small"><strong>Expected files</strong></p>
+          <ul class="expected-list">
+            <li><span>Rabies and Double Injections:</span> microscopy images (PNG/JPG/TIFF) + three QUINT CSVs (bilateral, ipsilateral, contralateral); optional notes.</li>
+            <li><span>scRNA-sequencing Data:</span> counts (H5/H5AD/MTX/H5AD), cell metadata, gene metadata, pipeline config.</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

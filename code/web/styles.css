@@ -17,6 +17,7 @@ body{
   color:var(--ink);
   background:var(--paper);
 }
+.container{ max-width:1200px; margin:0 auto; padding:0 16px }
 
 /* Navbar */
 .nav{
@@ -27,6 +28,7 @@ body{
 .nav__inner{ max-width:1120px; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
 .brand{ font-weight:600; color:var(--ink); text-decoration:none }
 .nav__links a{ margin-left:16px; color:#4b5563; text-decoration:none; font-size:14px }
+.nav__links a.is-active{ color:var(--accent2); font-weight:600; }
 .nav__links a:hover{ color:var(--accent2) }
 
 /* Hero */
@@ -56,6 +58,19 @@ h1{ font-size:40px; line-height:1.1; margin:8px 0 0 }
 h2,h3,h4{ margin:6px 0 }
 .muted{ color:var(--muted) }
 .narrow{ max-width: 64ch }
+.module-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:12px;
+  margin-top:16px;
+}
+.module-card{
+  padding:14px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 4px 12px rgba(15,23,42,0.05);
+}
 
 /* Tabs */
 .tabs{ display:flex; gap:8px; margin:16px 0 8px; flex-wrap:wrap }
@@ -122,6 +137,71 @@ h2,h3,h4{ margin:6px 0 }
   border:none;
   padding:8px 0;
   color:#1f2937;
+}
+.abstract-card{
+  border:none;
+  border-radius:0;
+  padding:0;
+  background:transparent;
+  margin-bottom:12px;
+  box-shadow:none;
+}
+.abstract-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.abstract-head button{
+  all:unset;
+  color:#2563eb;
+  font-size:13px;
+  cursor:pointer;
+  padding:0;
+  line-height:1.4;
+}
+.abstract-head button:hover{ text-decoration:underline; }
+.abstract-head button:focus{ outline:none; text-decoration:underline; }
+.abstract-head h3{
+  margin:0;
+  font-size:32px;
+  color:#0f172a;
+}
+.abstract-head .kicker{ margin-bottom:4px; }
+.abstract-body{
+  margin-top:10px;
+  color:#374151;
+  font-size:15px;
+  line-height:1.5;
+  font-family:inherit;
+}
+.abstract-plain__body{
+  margin-bottom:18px;
+}
+.abstract-plain{ position:relative; }
+.abstract-plain__head{ display:flex; flex-direction:column; gap:6px; }
+.abstract-plain__meta{ display:flex; flex-direction:column; gap:6px; }
+.abstract-plain__title-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.abstract-plain__toggle{
+  background:transparent;
+  border:none;
+  color:#2563eb;
+  cursor:pointer;
+  padding:0;
+  font-size:14px;
+  font-weight:600;
+  line-height:1.4;
+}
+.abstract-plain__toggle:hover{ text-decoration:underline; }
+.abstract-plain__toggle:focus-visible{
+  outline:2px solid rgba(37,99,235,0.25);
+  outline-offset:2px;
+  border-radius:4px;
 }
 
 /* Rabies Cleveland plot layout */
@@ -198,30 +278,8 @@ h2,h3,h4{ margin:6px 0 }
 .rabies-main{ position:relative; padding:16px; }
 .dotplot-container{
   width:100%;
-  min-height:560px;
-  min-width:560px;
-  aspect-ratio:1 / 1; /* keep boxes square; height follows width (can grow wider but not skinnier) */
+  min-height:400px;
 }
-.dotplot-grid{
-  display:grid;
-  grid-template-columns:repeat(2, minmax(420px, 1fr));
-  gap:0;
-  align-items:start;
-  padding:4px 0 8px;
-  background:#fff;
-  justify-items:center;
-  max-width:980px;
-  margin:0 auto;
-}
-.dotplot-panel{
-  padding:0;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  width:100%;
-  align-items:center;
-}
-.dotplot-subtitle{ padding-left:12px; margin:0; }
 .sidebar-help{
   margin:4px 0 8px;
   font-size:12px;
@@ -564,3 +622,30 @@ h2,h3,h4{ margin:6px 0 }
 }
 .picker-input{ display:flex; gap:8px; margin-top:8px }
 .region-picker{ margin-top:12px; }
+.figure-panel{
+  display:flex;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  box-shadow:0 1px 2px rgba(0,0,0,0.05);
+  border-radius:8px;
+  overflow:hidden;
+}
+.panel-a, .panel-b{
+  width:50%;
+  padding:20px;
+  background:#fff;
+}
+.panel-a{
+  border-right:1px solid #e5e7eb;
+}
+.panel-label{
+  font-weight:700;
+  color:#111827;
+  margin-bottom:6px;
+}
+.figure-title{
+  margin:0 0 8px 0;
+  font-size:1.1rem;
+  color:#111827;
+  font-weight:700;
+}

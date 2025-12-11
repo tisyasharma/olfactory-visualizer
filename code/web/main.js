@@ -20,6 +20,24 @@ tabs.forEach(({btn, panel}) => {
   b?.addEventListener('click', () => activateTab(btn, panel));
 });
 
+// Collapsible abstract for rabies tab
+const rabiesAbstractToggle = document.getElementById('rabiesAbstractToggle');
+const rabiesAbstractBody = document.getElementById('rabiesAbstractBody');
+const rationaleShowLabel = '[+] View Experimental Rationale';
+const rationaleHideLabel = '[-] Hide Experimental Rationale';
+rabiesAbstractToggle?.addEventListener('click', () => {
+  const isExpanded = rabiesAbstractToggle.getAttribute('aria-expanded') === 'true';
+  rabiesAbstractToggle.setAttribute('aria-expanded', String(!isExpanded));
+  if(rabiesAbstractBody){
+    rabiesAbstractBody.hidden = isExpanded;
+    rabiesAbstractBody.style.maxHeight = isExpanded ? '0px' : '800px';
+  }
+  rabiesAbstractToggle.textContent = isExpanded ? rationaleShowLabel : rationaleHideLabel;
+});
+if(rabiesAbstractToggle){
+  rabiesAbstractToggle.textContent = rationaleShowLabel;
+}
+
 // Switch tab buttons and panels for the dataset sections. 
 function activateTab(activeBtnId, activePanelId){
   // buttons
@@ -247,7 +265,7 @@ function applyDefaultRabiesSelection(){
 
 /* Draw both ipsilateral and contralateral rabies dot plots. */
 function drawRabiesDotPlot(){
-  const regions = getSelectedRabiesRegions();
+  const regions = getOrderedRabiesRegions();
   const ipsiData = buildRabiesChartData('ipsilateral', regions);
   const contraData = buildRabiesChartData('contralateral', regions);
   const domainMax = Math.max(
@@ -255,7 +273,7 @@ function drawRabiesDotPlot(){
     d3.max([...ipsiData, ...contraData], d => (d.valuePerc + d.semPerc) || d.valuePerc || 0) || 0
   );
   const rows = Math.max(regions.length, 9);
-  const rowSpacing = 38;
+  const rowSpacing = 32;
   const innerSide = Math.max(520, rows * rowSpacing); // square inner plotting area (height == width)
   drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi', ipsiData, regions, domainMax, innerSide);
   drawRabiesSingle('contralateral', '#rabiesDotPlotContra', contraData, regions, domainMax, innerSide);
@@ -319,12 +337,24 @@ function buildRabiesChartData(hemiKey, regions){
   }));
 }
 
-// Selected regions (or all available if none manually chosen).
-function getSelectedRabiesRegions(){
-  if(rabiesState.selectedRegions.size){
-    return Array.from(rabiesState.selectedRegions);
-  }
-  return Array.from(new Set(rabiesState.data.map(d => d.region)));
+// Selected regions (or all available if none manually chosen), ordered with defaults first.
+function getOrderedRabiesRegions(){
+  const selected = rabiesState.selectedRegions.size
+    ? Array.from(rabiesState.selectedRegions)
+    : Array.from(new Set(rabiesState.data.map(d => d.region)));
+  const seen = new Set();
+  const ordered = [];
+  // prioritize default order
+  defaultRabiesRegions.forEach(def => {
+    const match = selected.find(r => r.toLowerCase() === def.toLowerCase());
+    if(match && !seen.has(match)){ ordered.push(match); seen.add(match); }
+  });
+  // append remaining alphabetically
+  selected
+    .filter(r => !seen.has(r))
+    .sort((a,b) => a.localeCompare(b))
+    .forEach(r => { seen.add(r); ordered.push(r); });
+  return ordered;
 }
 
 function regionAcronym(name){
@@ -377,7 +407,7 @@ function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, inne
   const y = d3.scalePoint()
     .domain(regionLabels)
     .range([plotTop, plotBottom])
-    .padding(0.5);
+    .padding(0.35);
 
   const color = d3.scaleOrdinal()
     .domain(['Vglut1','Vgat'])
