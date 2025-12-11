@@ -19,7 +19,17 @@ ALLOWED_SUBJECTS = {meta["subject"] for meta in SUBJECT_MAP.values()}
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".ome.tif", ".ome.tiff", ".zarr", ".ome.zarr")
 
 
-def _stage_images(files: List[UploadFile]) -> (Path, List[Path]):
+def _stage_images(files: List[UploadFile]):
+    """
+    Parameters:
+        files (list[UploadFile]): Incoming files from the client.
+
+    Returns:
+        tuple[Path, list[Path]]: Temp directory and saved file paths.
+
+    Does:
+        Validates extensions/size, writes uploads to a temp dir, and returns paths or raises HTTP errors.
+    """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
     tmpdir = Path(tempfile.mkdtemp())
@@ -58,7 +68,20 @@ async def create_microscopy_files(
     files: List[UploadFile] = File(...),
 ):
     """
-    Take microscopy uploads, convert to OME-Zarr, and register them.
+    Parameters:
+        subject_id (str | None): Optional BIDS subject id; auto-assigned when omitted.
+        session_id (str): BIDS session label or "auto".
+        hemisphere (str): Hemisphere label (left/right/bilateral).
+        pixel_size_um (float): Pixel size in micrometers.
+        experiment_type (str): Experiment type (double_injection|rabies).
+        comments (str | None): Optional notes to persist on the session.
+        files (list[UploadFile]): Microscopy image uploads.
+
+    Returns:
+        dict: Upload status with subject_id, session_id, ingested files, and processed filenames.
+
+    Does:
+        Stages uploads, runs duplicate checks, ingests microscopy files into OME-Zarr + DB, and cleans temp storage.
     """
     tmpdir, saved_paths = _stage_images(files)
     engine = get_engine()
@@ -97,6 +120,16 @@ async def create_microscopy_files(
 @router.post("/microscopy-files/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
 @router.post("/microscopy-files/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
 async def microscopy_files_duplicate_check(payload: Union[HashesPayload, List[str]] = Body(...)):
+    """
+    Parameters:
+        payload (HashesPayload | list[str]): SHA256 hashes to compare against existing ingests.
+
+    Returns:
+        DuplicateCheckResponse: Duplicate flag plus message.
+
+    Does:
+        Normalizes hash input and runs duplicate detection for microscopy uploads.
+    """
     # Accept either raw list or {\"hashes\": [...]} for convenience
     hashes: List[str]
     if isinstance(payload, list):
@@ -115,12 +148,32 @@ async def microscopy_files_duplicate_check(payload: Union[HashesPayload, List[st
 
 @router.get("/microscopy-files", status_code=200, response_model=List[MicroscopyFile])
 async def list_microscopy_files(limit: int = 100):
+    """
+    Parameters:
+        limit (int): Maximum number of rows to return.
+
+    Returns:
+        list[MicroscopyFile]: Microscopy file metadata rows.
+
+    Does:
+        Delegates to the upload service to fetch microscopy_files with an optional limit.
+    """
     engine = get_engine()
     return upload_service.list_microscopy_files(engine, limit)
 
 
 @router.get("/microscopy-files/{file_id}", status_code=200, response_model=MicroscopyFile)
 async def get_microscopy_file(file_id: int):
+    """
+    Parameters:
+        file_id (int): Microscopy file primary key.
+
+    Returns:
+        MicroscopyFile: File metadata row if found.
+
+    Does:
+        Retrieves one microscopy_files row by id or raises a 404 HTTPException when missing.
+    """
     engine = get_engine()
     row = upload_service.get_microscopy_file(engine, file_id)
     if not row:

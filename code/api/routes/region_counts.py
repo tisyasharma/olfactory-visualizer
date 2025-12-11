@@ -28,7 +28,18 @@ async def create_region_counts(
     files: List[UploadFile] = File(...),
 ):
     """
-    Take quant CSVs and push them into region_counts.
+    Parameters:
+        subject_id (str): BIDS subject id for the quantification rows.
+        session_id (str | None): Optional BIDS session id.
+        hemisphere (str): Hemisphere label or auto to infer.
+        experiment_type (str): Experiment type (double_injection|rabies).
+        files (list[UploadFile]): Quantification CSV uploads.
+
+    Returns:
+        dict: Status and rows_ingested count.
+
+    Does:
+        Validates subject/session, checks for duplicates, stages CSVs, and ingests them into region_counts with logging.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
@@ -105,6 +116,16 @@ async def create_region_counts(
 @router.post("/region-counts/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
 @router.post("/region-counts/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
 async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
+    """
+    Parameters:
+        files (list[UploadFile]): Uploaded quantification CSVs.
+
+    Returns:
+        DuplicateCheckResponse: Duplicate flag and reason message.
+
+    Does:
+        Hashes provided CSVs and checks for prior successful ingests to prevent duplicates.
+    """
     if not files:
         return {"duplicate": False, "message": "No files provided"}
     tmpdir = Path(tempfile.mkdtemp())
@@ -136,12 +157,33 @@ async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
 
 @router.get("/region-counts", status_code=200, response_model=List[RegionCountSummary])
 async def list_region_counts(limit: int = 100):
+    """
+    Parameters:
+        limit (int): Maximum number of rows to return.
+
+    Returns:
+        list[RegionCountSummary]: Region count summaries.
+
+    Does:
+        Fetches region_counts metadata rows with an optional limit.
+    """
     engine = get_engine()
     return upload_service.list_region_counts(engine, limit)
 
 
 @router.get("/region-counts/file/{file_id}", status_code=200, response_model=List[RegionCountSummary])
 async def get_region_counts_for_file(file_id: int, limit: int = 1000):
+    """
+    Parameters:
+        file_id (int): Microscopy file id to pull counts for.
+        limit (int): Maximum number of rows to return.
+
+    Returns:
+        list[RegionCountSummary]: Region count rows for the file.
+
+    Does:
+        Retrieves region_counts for a given file_id up to the limit or raises 404 if none exist.
+    """
     engine = get_engine()
     rows = upload_service.get_region_counts_for_file(engine, file_id, limit)
     if not rows:

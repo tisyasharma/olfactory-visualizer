@@ -17,6 +17,16 @@ _membership_df = None
 
 
 def load_rna_tables():
+    """
+    Parameters:
+        None
+
+    Returns:
+        bool: True if all required CSVs are loaded; False if missing.
+
+    Does:
+        Loads scRNA CSVs into module-level DataFrames, returning False when files are absent.
+    """
     global _clusters_df, _terms_df, _membership_df
     if _clusters_df is not None and _terms_df is not None and _membership_df is not None:
         return True
@@ -33,6 +43,16 @@ def load_rna_tables():
 
 
 def scrna_samples_data():
+    """
+    Parameters:
+        None
+
+    Returns:
+        list[dict]: Sample metadata rows for scRNA datasets.
+
+    Does:
+        Returns a static sample description if the RNA tables are loaded, else an empty list.
+    """
     if not load_rna_tables():
         return []
     return [{
@@ -44,6 +64,16 @@ def scrna_samples_data():
 
 
 def scrna_clusters_data():
+    """
+    Parameters:
+        None
+
+    Returns:
+        list[dict]: Cluster rows with ids, labels, and cell counts.
+
+    Does:
+        Projects the clusters CSV into JSON-ready dicts when RNA tables are available.
+    """
     if not load_rna_tables():
         return []
     return [
@@ -58,6 +88,17 @@ def scrna_clusters_data():
 
 
 def scrna_markers_data(cluster_id: str, limit: int):
+    """
+    Parameters:
+        cluster_id (str): Cluster identifier to retrieve markers for.
+        limit (int): Maximum number of marker rows to return.
+
+    Returns:
+        list[dict]: Marker rows with gene names and colors for the cluster.
+
+    Does:
+        Validates cluster_id, filters membership for the cluster, joins term metadata, and returns up to limit markers.
+    """
     if not load_rna_tables():
         return []
     try:
@@ -84,6 +125,16 @@ def scrna_markers_data(cluster_id: str, limit: int):
 
 @router.get("/scrna/samples")
 def scrna_samples():
+    """
+    Parameters:
+        None
+
+    Returns:
+        list[dict]: scRNA sample metadata or empty list if not configured.
+
+    Does:
+        Calls scrna_samples_data and returns sample rows without raising when data is missing.
+    """
     data = scrna_samples_data()
     if not data:
         # Return 204 to signal "no scRNA configured" without throwing
@@ -93,9 +144,31 @@ def scrna_samples():
 
 @router.get("/scrna/clusters")
 def scrna_clusters(sample_id: Optional[str] = None):
+    """
+    Parameters:
+        sample_id (str | None): Optional sample filter (unused in current data).
+
+    Returns:
+        list[dict]: Cluster rows for the scRNA sample set.
+
+    Does:
+        Returns clusters regardless of sample_id; kept for future filtering.
+    """
     return scrna_clusters_data()
 
 
 @router.get("/scrna/markers")
 def scrna_markers(sample_id: str, cluster_id: str, limit: int = Query(50, ge=1, le=500)):
+    """
+    Parameters:
+        sample_id (str): Sample identifier (placeholder for future use).
+        cluster_id (str): Cluster id to fetch marker genes for.
+        limit (int): Maximum number of markers to return.
+
+    Returns:
+        list[dict]: Marker rows with gene names/colors for the cluster.
+
+    Does:
+        Delegates to scrna_markers_data to fetch markers for a cluster, capped by limit.
+    """
     return scrna_markers_data(cluster_id, limit)

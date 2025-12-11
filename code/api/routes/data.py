@@ -22,12 +22,32 @@ class Subject(BaseModel):
 
 @router.get("/subjects", response_model=List[Subject])
 def list_subjects():
+    """
+    Parameters:
+        None
+
+    Returns:
+        list[dict]: Rows of subjects with id, sex, experiment_type, and details.
+
+    Does:
+        Fetches all subjects ordered by subject_id and returns them as JSON-ready dicts.
+    """
     rows = fetch_all("SELECT subject_id, sex, experiment_type, details FROM subjects ORDER BY subject_id")
     return rows
 
 
 @router.get("/sessions")
 def list_sessions(subject_id: Optional[str] = None):
+    """
+    Parameters:
+        subject_id (str | None): Optional subject filter.
+
+    Returns:
+        list[dict]: Session rows including session_id, subject_id, modality, session_date, protocol, notes.
+
+    Does:
+        Retrieves sessions from the database, optionally filtered by subject_id.
+    """
     q = "SELECT session_id, subject_id, modality, session_date, protocol, notes FROM sessions"
     params = {}
     if subject_id:
@@ -39,6 +59,16 @@ def list_sessions(subject_id: Optional[str] = None):
 
 @router.get("/regions/tree")
 def regions_tree():
+    """
+    Parameters:
+        None
+
+    Returns:
+        list[dict]: Flattened brain region rows with ids, names, hierarchy metadata.
+
+    Does:
+        Pulls the full brain_regions table ordered by region_id.
+    """
     rows = fetch_all(
         "SELECT region_id, name, acronym, parent_id, st_level, atlas_id, ontology_id " \
         "FROM brain_regions " \
@@ -49,6 +79,17 @@ def regions_tree():
 
 @router.get("/files")
 def list_files(session_id: Optional[str] = None, subject_id: Optional[str] = None):
+    """
+    Parameters:
+        session_id (str | None): Optional session filter.
+        subject_id (str | None): Optional subject filter.
+
+    Returns:
+        list[dict]: Microscopy file rows including session, subject, hemisphere, path, hash, created_at.
+
+    Does:
+        Joins microscopy_files to sessions, applies optional filters, and returns sorted file metadata.
+    """
     q = """
     SELECT mf.file_id, mf.session_id, s.subject_id, mf.run, mf.hemisphere, mf.path, mf.sha256, mf.created_at
     FROM microscopy_files mf
@@ -75,6 +116,19 @@ def fluor_counts(
     hemisphere: Optional[str] = Query(None, regex="^(left|right|bilateral)$"),
     limit: int = Query(500, ge=1, le=5000),
 ):
+    """
+    Parameters:
+        subject_id (str | None): Optional subject filter.
+        region_id (int | None): Optional region filter.
+        hemisphere (str | None): Optional hemisphere filter (left/right/bilateral).
+        limit (int): Max rows to return.
+
+    Returns:
+        list[dict]: Region count rows with region metadata and load metrics.
+
+    Does:
+        Queries region_counts joined to brain_regions with optional filters and returns up to limit rows.
+    """
     q = """
     SELECT rc.subject_id, rc.region_id, br.name AS region_name, rc.region_pixels, rc.region_area_mm,
            rc.object_count, rc.object_pixels, rc.object_area_mm, rc.load, rc.norm_load,
@@ -110,7 +164,19 @@ def fluor_summary(
     limit: int = Query(500, ge=1, le=5000),
 ):
     """
-    Aggregated region-level summary so the frontend doesn't have to crunch it.
+    Parameters:
+        experiment_type (str | None): Filter by experiment type (double_injection/rabies).
+        hemisphere (str | None): Filter by hemisphere (left/right/bilateral).
+        subject_id (str | None): Optional subject filter.
+        region_id (int | None): Optional region filter.
+        group_by (str | None): Aggregate by genotype or subject.
+        limit (int): Max rows to return.
+
+    Returns:
+        list[dict]: Aggregated region metrics (sum/avg) optionally grouped.
+
+    Does:
+        Builds a grouped summary query over region_counts and brain_regions with optional filters and grouping.
     """
     grouping = []
     select_group = []
@@ -170,6 +236,16 @@ def fluor_summary(
 
 @router.get("/status")
 def status():
+    """
+    Parameters:
+        None
+
+    Returns:
+        dict: Counts of subjects, files, and region_count rows.
+
+    Does:
+        Executes three count queries to report basic ingest status.
+    """
     rows = fetch_all("SELECT count(*) AS subjects FROM subjects")
     subs = rows[0]["subjects"]
     rows = fetch_all("SELECT count(*) AS files FROM microscopy_files")
@@ -186,9 +262,16 @@ def region_load_summary(
     limit: int = Query(20000, ge=1, le=50000),
 ):
     """
-    Region-level load fraction summary:
-    - load_fraction = load / sum(load) per subject (mouse) within the filtered set.
-    - Returns mean + SEM across mice for each region/hemisphere combo.
+    Parameters:
+        experiment_type (str | None): Filter by experiment type (default rabies).
+        hemisphere (str | None): Optional hemisphere filter.
+        limit (int): Row cap for the base query.
+
+    Returns:
+        list[dict]: Mean and SEM load_fraction by region, hemisphere, genotype with mouse counts.
+
+    Does:
+        Fetches region load rows, normalizes per-mouse load_fraction, groups by region/hemisphere/genotype, and computes mean/SEM.
     """
     q = """
     SELECT rc.subject_id, br.name AS region, rc.hemisphere, rc.load, s.details, s.experiment_type
@@ -211,7 +294,7 @@ def region_load_summary(
     rows = fetch_all(q, params)
     rows = add_load_fraction(rows, mouse_id_field="subject_id", load_field="load", out_field="load_fraction")
 
-    # Group by region + hemisphere + genotype
+    # Group by region, hemisphere, genotype
     grouped = {}
     regions_seen = set()
     for r in rows:
@@ -267,7 +350,16 @@ def region_load_by_mouse(
     limit: int = Query(20000, ge=1, le=50000),
 ):
     """
-    Per-mouse load and load_fraction for each region. Helpful for debugging normalization.
+    Parameters:
+        experiment_type (str | None): Filter by experiment type (default rabies).
+        hemisphere (str | None): Optional hemisphere filter.
+        limit (int): Row cap for the base query.
+
+    Returns:
+        list[dict]: Per-mouse load and load_fraction per region with genotype tag.
+
+    Does:
+        Retrieves region load rows, computes load_fraction per mouse, filters to Vglut1/Vgat, and returns mouse-level values.
     """
     q = """
     SELECT rc.subject_id, br.name AS region, rc.hemisphere, rc.load, s.details, s.experiment_type
