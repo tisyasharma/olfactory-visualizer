@@ -1,33 +1,11 @@
 // Initialize AOS (scroll animations)
 AOS.init({ once:true, duration:600, easing:'ease-out' });
 
-// Back-to-top button visibility
-const toTop = document.getElementById('toTop');
-window.addEventListener('scroll', () => {
-  toTop.style.display = window.scrollY > 600 ? 'block' : 'none';
-});
-toTop.addEventListener('click', () => window.scrollTo({ top:0, behavior:'smooth' }));
-
-// Global filters (stub wiring for later API calls)
-const dateRange = document.getElementById('dateRange');
-const dateVal = document.getElementById('dateVal');
-const genotypeSelect = document.getElementById('genotypeSelect');
-const lateralitySelect = document.getElementById('lateralitySelect');
-const mouseSelect = document.getElementById('mouseSelect');
+// Tab/controls
 const scrnaSampleSelect = document.getElementById('scrnaSampleSelect');
 const scrnaClusterSelect = document.getElementById('scrnaClusterSelect');
 const fileSelect = document.getElementById('fileSelect');
 const fileDetails = document.getElementById('fileDetails');
-
-dateRange?.addEventListener('input', () => { dateVal.textContent = dateRange.value; syncGlobalFilters(); });
-genotypeSelect?.addEventListener('change', syncGlobalFilters);
-lateralitySelect?.addEventListener('change', syncGlobalFilters);
-mouseSelect?.addEventListener('change', syncGlobalFilters);
-
-// Sync top-level dataset filters (date/modality/hemisphere) into the UI state. 
-function syncGlobalFilters(){
-  // charts removed for now, placeholder hook for future visuals
-}
 
 // Tabs logic
 const tabs = [
@@ -58,51 +36,11 @@ function activateTab(activeBtnId, activePanelId){
   });
 }
 
-// Per-tab stub controls
-const rabiesWindow = document.getElementById('rabiesWindow');
-const rabiesWindowVal = document.getElementById('rabiesWindowVal');
-rabiesWindow?.addEventListener('input', () => {
-  rabiesWindowVal.textContent = rabiesWindow.value;
-  drawRabiesDotPlot();
-});
-
-// Vega-Lite theme (kept for future charts)
 const accent1 = getComputedStyle(document.documentElement).getPropertyValue('--accent1').trim();
 const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim();
 const accent3 = getComputedStyle(document.documentElement).getPropertyValue('--accent3').trim();
 
 const API = '/api/v1';
-
-// Initialize VegaLite theme defaults.
-function vlTheme(){
-  return {
-    background: 'transparent',
-    title: { color: '#111827', font: 'Inter', fontSize: 16, fontWeight: 600 },
-    axis: { labelColor: '#374151', titleColor: '#374151', gridColor: '#e5e7eb' },
-    legend: { labelColor: '#374151', titleColor: '#374151' },
-    range: { category: [accent2, accent1, accent3, '#7c8aa6', '#aab6cf'] }
-  };
-}
-
-async function embedVL(targetId, spec){
-  const specFinal = { $schema:'https://vega.github.io/schema/vega-lite/v5.json', ...spec, config: vlTheme() };
-  return vegaEmbed('#' + targetId, specFinal, { actions:false, renderer:'canvas' });
-}
-
-// Placeholder updaters (no data yet)
-// Normalize hemisphere input to api-friendly values.
-function normalizeHemisphere(val){
-  if(!val || val === 'all') return null;
-  if(val === 'ipsi') return 'left';
-  if(val === 'contra') return 'right';
-  if(['left','right','bilateral'].includes(val)) return val;
-  return null;
-}
-// Map UI laterality values to API hemisphere names
-function mapLateralityToApi(val){
-  return normalizeHemisphere(val) || 'bilateral';
-}
-
 // Data fetchers for future charts (kept for reuse)
 async function fetchFluorSummary(experimentType, hemisphere, subjectId, regionId, groupBy){
   const qs = new URLSearchParams();
@@ -151,14 +89,15 @@ const rabiesState = {
   regions: [],
   allRegions: [],
   loading: false,
-  regionTreeCached: false
+  regionTreeCached: false,
+  regionNameToAcronym: {}
 };
+const rabiesPlotMargins = { top: 12, right: 28, bottom: 44, left: 220 };
 
 const regionSearch = document.getElementById('rabiesRegionSearch');
 const regionListEl = document.getElementById('rabiesRegionList');
 const tooltip = document.getElementById('rabiesTooltip');
 const groupRadios = document.querySelectorAll('input[name="rabiesGroupBy"]');
-const rabiesSelectedCount = document.getElementById('rabiesSelectedCount');
 const rabiesResetBtn = document.getElementById('rabiesResetBtn');
 const rabiesClearBtn = document.getElementById('rabiesClearBtn');
 const rabiesStatus = document.getElementById('rabiesStatus');
@@ -199,10 +138,7 @@ rabiesClearBtn?.addEventListener('click', () => {
 });
 
 function updateSelectedCount(){
-  if(rabiesSelectedCount){
-    const count = rabiesState.selectedRegions.size;
-    rabiesSelectedCount.textContent = count ? `${count} selected` : '0 selected';
-  }
+  // kept for potential future use; currently not showing a count badge
 }
 
 function setRabiesStatus(msg, tone='muted'){
@@ -242,6 +178,12 @@ function renderRegionList(){
 async function loadRabiesData(){
   rabiesState.loading = true;
   setRabiesStatus('Loading rabies data…', 'muted');
+  const treePromise = !rabiesState.regionTreeCached
+    ? fetchJson(`${API}/regions/tree`).catch(err => {
+        console.warn('Region tree load failed', err);
+        return null;
+      })
+    : Promise.resolve(null);
   try{
     // Always pull both hemispheres and show side by side.
     const allowedGenos = new Set(['Vglut1','Vgat']);
@@ -254,42 +196,35 @@ async function loadRabiesData(){
     const contra = clean(contraRaw);
     rabiesState.dataByHemi = { ipsilateral: ipsi, contralateral: contra };
     const allData = [...ipsi, ...contra];
-    // Seed region names from the data while we fetch the tree.
+    // Seed region names from the data; may be overridden by the tree for stable acronyms.
     const regionSet = new Set(allData.map(d => d.region));
     defaultRabiesRegions.forEach(r => regionSet.add(r));
     rabiesState.allRegions = Array.from(regionSet).sort();
     rabiesState.data = allData;
+    // Await region tree to pre-populate acronyms before first render.
+    const regionTree = await treePromise;
+    if(regionTree && Array.isArray(regionTree) && regionTree.length){
+      rabiesState.regionNameToAcronym = {};
+      regionTree.forEach(r => {
+        if(r.name && r.acronym){
+          rabiesState.regionNameToAcronym[r.name] = r.acronym;
+        }
+      });
+      const regionNames = Array.from(new Set(regionTree.map(r => r.name))).sort();
+      if(regionNames.length){
+        rabiesState.allRegions = regionNames;
+      }
+      rabiesState.regionTreeCached = true;
+    }
     applyDefaultRabiesSelection();
     rabiesState.regions = rabiesState.allRegions;
     renderRegionList();
     drawRabiesDotPlot();
-    // Fetch region tree once (caches) to fill the picker with full atlas names.
-    if(!rabiesState.regionTreeCached){
-      try{
-        const regionTree = await fetchJson(`${API}/regions/tree`);
-        const regionNames = Array.from(new Set((regionTree || []).map(r => r.name))).sort();
-        if(regionNames.length){
-          rabiesState.allRegions = regionNames;
-          rabiesState.regions = rabiesState.allRegions;
-          // Keep current selections if they still exist; otherwise reapply defaults.
-          const retained = new Set(Array.from(rabiesState.selectedRegions).filter(r => regionNames.includes(r)));
-          if(retained.size){
-            rabiesState.selectedRegions = retained;
-          }else{
-            applyDefaultRabiesSelection();
-          }
-          renderRegionList();
-          drawRabiesDotPlot();
-        }
-        rabiesState.regionTreeCached = true;
-      }catch(treeErr){
-        console.warn('Region tree load failed', treeErr);
-      }
-    }
     setRabiesStatus(allData.length ? 'Showing normalized load fractions.' : 'No rabies data found. Ingest data to populate the plot.', allData.length ? 'muted' : 'note');
   }catch(err){
     console.warn('Rabies data load failed', err);
-    setRabiesStatus('Rabies data load failed. Check the API and try again.', 'note');
+    const msg = err?.message || 'Rabies data load failed. Check the API and try again.';
+    setRabiesStatus(msg, 'note');
   }finally{
     rabiesState.loading = false;
   }
@@ -312,28 +247,28 @@ function applyDefaultRabiesSelection(){
 
 /* Draw both ipsilateral and contralateral rabies dot plots. */
 function drawRabiesDotPlot(){
-  drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi');
-  drawRabiesSingle('contralateral', '#rabiesDotPlotContra');
+  const regions = getSelectedRabiesRegions();
+  const ipsiData = buildRabiesChartData('ipsilateral', regions);
+  const contraData = buildRabiesChartData('contralateral', regions);
+  const domainMax = Math.max(
+    100,
+    d3.max([...ipsiData, ...contraData], d => (d.valuePerc + d.semPerc) || d.valuePerc || 0) || 0
+  );
+  const rows = Math.max(regions.length, 9);
+  const rowSpacing = 38;
+  const innerSide = Math.max(520, rows * rowSpacing); // square inner plotting area (height == width)
+  drawRabiesSingle('ipsilateral', '#rabiesDotPlotIpsi', ipsiData, regions, domainMax, innerSide);
+  drawRabiesSingle('contralateral', '#rabiesDotPlotContra', contraData, regions, domainMax, innerSide);
 }
 
-/* Render a single rabies dot plot for the given hemisphere. */
-function drawRabiesSingle(hemiKey, selector){
-  const container = d3.select(selector);
-  if(container.empty()) return;
-  container.selectAll('*').remove();
+// Build chart-ready rows for a hemisphere, respecting current grouping.
+function buildRabiesChartData(hemiKey, regions){
   const valuesSource = rabiesState.dataByHemi[hemiKey] || [];
-  if(rabiesState.selectedRegions.size === 0){
-    container.append('div').attr('class','muted').text('Select regions to plot.');
-    return;
-  }
-  const selectedRegions = rabiesState.selectedRegions.size
-    ? Array.from(rabiesState.selectedRegions)
-    : Array.from(new Set(rabiesState.data.map(d => d.region)));
-
-  // Build chart data for every selected region, even if missing -> value 0.
+  if(!regions.length) return [];
   let chartData = [];
   if(rabiesState.groupBy === 'genotype'){
-    selectedRegions.forEach(region => {
+    regions.forEach(region => {
+      const regionLabel = regionAcronym(region);
       const grouped = { Vglut1: [], Vgat: [] };
       valuesSource.filter(v => v.region === region).forEach(v => {
         const geno = v.genotype || 'other';
@@ -350,14 +285,15 @@ function drawRabiesSingle(hemiKey, selector){
           const variance = vals.reduce((a,b)=>a + Math.pow(b-mean,2),0) / (n-1);
           sem = Math.sqrt(variance) / Math.sqrt(n);
         }
-        chartData.push({ region, group: label, value: mean, sem, n });
+        chartData.push({ region, regionLabel, group: label, value: mean, sem, n });
       };
       pushAgg('Vglut1', grouped['Vglut1']);
       pushAgg('Vgat', grouped['Vgat']);
     });
   }else{
     // subject-level: one dot per mouse, but color still tied to genotype
-    chartData = selectedRegions.flatMap(region => {
+    chartData = regions.flatMap(region => {
+      const regionLabel = regionAcronym(region);
       return valuesSource
         .filter(v => v.region === region)
         .map(v => {
@@ -365,6 +301,7 @@ function drawRabiesSingle(hemiKey, selector){
           if(g !== 'Vglut1' && g !== 'Vgat') return null;
           return {
             region,
+            regionLabel,
             group: g,
             subject: v.subject_id,
             value: v.load_fraction ?? 0,
@@ -375,35 +312,107 @@ function drawRabiesSingle(hemiKey, selector){
         .filter(Boolean);
     });
   }
+  return chartData.map(d => ({
+    ...d,
+    valuePerc: (d.value || 0) * 100,
+    semPerc: (d.sem || 0) * 100
+  }));
+}
 
-  const regions = selectedRegions;
+// Selected regions (or all available if none manually chosen).
+function getSelectedRabiesRegions(){
+  if(rabiesState.selectedRegions.size){
+    return Array.from(rabiesState.selectedRegions);
+  }
+  return Array.from(new Set(rabiesState.data.map(d => d.region)));
+}
+
+function regionAcronym(name){
+  return rabiesState.regionNameToAcronym[name] || name;
+}
+
+/* Render a single rabies dot plot for the given hemisphere. */
+function drawRabiesSingle(hemiKey, selector, chartData, regions, domainMax, innerSide){
+  const container = d3.select(selector);
+  if(container.empty()) return;
+  container.selectAll('*').remove();
+  if(!regions || regions.length === 0){
+    container.append('div').attr('class','muted').text('Select regions to plot.');
+    return;
+  }
 
   if(!chartData.length){
     container.append('div').attr('class','muted').text('No data to display.');
     return;
   }
-  const margin = { top: 20, right: 220, bottom: 40, left: 260 };
-  const width = Math.max(720, container.node().clientWidth || 720);
-  const hCount = Math.max(regions.length, 9);
-  const height = Math.max(320, hCount * 26 + margin.top + margin.bottom);
+  const margin = rabiesPlotMargins; // shared margins keep sizing in sync
+  const legendSpace = 48; // space to allow legend outside top-right
+  const plotLeft = margin.left;
+  const plotTop = margin.top;
+  const plotRight = plotLeft + innerSide;
+  const plotBottom = plotTop + innerSide;
+  const width = plotRight + legendSpace;
+  const height = plotBottom + margin.bottom;
+  const axisColor = '#94a3b8'; // darker outline for visibility
+  const axisTextColor = '#1f2937';
   const svg = container.append('svg')
     .attr('viewBox', `0 0 ${width} ${height}`)
     .attr('preserveAspectRatio', 'xMidYMid meet')
     .style('width','100%')
     .style('height','100%');
 
-  const x = d3.scaleLinear()
-    .domain([0, d3.max(chartData, d => d.value) || 1])
-    .range([margin.left, width - margin.right]);
+  // Light plot background for grounding.
+  svg.append('rect')
+    .attr('x', plotLeft)
+    .attr('y', plotTop)
+    .attr('width', innerSide)
+    .attr('height', innerSide)
+    .attr('fill', '#f8fafc');
 
+  const x = d3.scaleLinear()
+    .domain([0, domainMax || Math.max(100, d3.max(chartData, d => d.valuePerc + d.semPerc) || 0)])
+    .range([plotLeft, plotRight]);
+
+  const regionLabels = regions.map(r => regionAcronym(r));
   const y = d3.scalePoint()
-    .domain(regions)
-    .range([margin.top, height - margin.bottom])
+    .domain(regionLabels)
+    .range([plotTop, plotBottom])
     .padding(0.5);
 
   const color = d3.scaleOrdinal()
     .domain(['Vglut1','Vgat'])
     .range([accent2, accent1]);
+
+  const xAxis = d3.axisBottom(x).ticks(6).tickSizeOuter(0);
+  const xGrid = d3.axisBottom(x).ticks(6).tickSize(-(innerSide)).tickFormat(() => '');
+  const xAxisTop = d3.axisTop(x).ticks(6).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
+  const yAxis = d3.axisLeft(y).tickSizeOuter(0);
+  const yGrid = d3.axisLeft(y).tickSize(-(innerSide)).tickFormat(() => '');
+  const yAxisRight = d3.axisRight(y).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
+
+  // Gridlines behind points.
+  svg.append('g')
+    .attr('transform', `translate(0,${plotBottom})`)
+    .call(xGrid)
+    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
+    .call(g => g.selectAll('text').remove())
+    .call(g => g.selectAll('.domain').remove());
+  svg.append('g')
+    .attr('transform', `translate(${plotLeft},0)`)
+    .call(yGrid)
+    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
+    .call(g => g.selectAll('text').remove())
+    .call(g => g.selectAll('.domain').remove());
+
+  // Framed plot area to mimic axes on all sides.
+  svg.append('rect')
+    .attr('x', plotLeft)
+    .attr('y', plotTop)
+    .attr('width', innerSide)
+    .attr('height', innerSide)
+    .attr('fill', 'none')
+    .attr('stroke', axisColor)
+    .attr('stroke-width', 1.4);
 
   // Error bars: mean +/- SEM (only meaningful for aggregated genotype view)
   if(rabiesState.groupBy === 'genotype'){
@@ -413,10 +422,10 @@ function drawRabiesSingle(hemiKey, selector){
       .enter()
       .append('line')
       .attr('class', 'err')
-      .attr('x1', d => x(Math.max(0, d.value - d.sem)))
-      .attr('x2', d => x(d.value + d.sem))
-      .attr('y1', d => y(d.region))
-      .attr('y2', d => y(d.region))
+      .attr('x1', d => x(Math.max(0, d.valuePerc - d.semPerc)))
+      .attr('x2', d => x(d.valuePerc + d.semPerc))
+      .attr('y1', d => y(d.regionLabel))
+      .attr('y2', d => y(d.regionLabel))
       .attr('stroke', '#cbd5e1')
       .attr('stroke-width', 2);
   }
@@ -427,8 +436,8 @@ function drawRabiesSingle(hemiKey, selector){
     .data(chartData)
     .enter()
     .append('circle')
-    .attr('cx', d => x(d.value))
-    .attr('cy', d => y(d.region))
+    .attr('cx', d => x(d.valuePerc))
+    .attr('cy', d => y(d.regionLabel))
     .attr('r', 6)
     .attr('fill', d => color(d.group))
     .attr('fill-opacity', 0.1)
@@ -437,31 +446,58 @@ function drawRabiesSingle(hemiKey, selector){
     .on('mouseenter', (event, d) => showTooltip(event, d))
     .on('mouseleave', hideTooltip);
 
-  const xAxis = d3.axisBottom(x).ticks(5).tickSizeOuter(0);
-  const yAxis = d3.axisLeft(y).tickSize(0);
   svg.append('g')
-    .attr('transform', `translate(0,${height - margin.bottom})`)
+    .attr('transform', `translate(0,${plotBottom})`)
     .call(xAxis)
-    .call(g => g.selectAll('.domain').attr('stroke','#e5e7eb'))
+    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
+    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2))
+    .call(g => g.selectAll('text').attr('fill', axisTextColor).attr('font-size', 11.5))
     .call(g => g.append('text')
-      .attr('x', width - margin.right)
-      .attr('y', 32)
-      .attr('fill', '#475569')
-      .attr('text-anchor', 'end')
+      .attr('x', plotLeft + (plotRight - plotLeft)/2)
+      .attr('y', 36)
+      .attr('fill', axisTextColor)
+      .attr('text-anchor', 'middle')
       .attr('font-size', 12)
-      .text('Load fraction (per mouse normalized)'));
+      .text('Load fraction (%) per mouse normalized'));
   svg.append('g')
-    .attr('transform', `translate(${margin.left - 10},0)`)
+    .attr('transform', `translate(0,${plotTop})`)
+    .call(xAxisTop)
+    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
+    .call(g => g.selectAll('line').remove())
+    .call(g => g.selectAll('text').remove());
+  const yAxisG = svg.append('g')
+    .attr('transform', `translate(${plotLeft},0)`)
     .call(yAxis)
-    .call(g => g.selectAll('text').attr('font-size', 12));
+    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
+    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2));
+  const yLabels = yAxisG.selectAll('text')
+    .attr('font-size', 11.5)
+    .attr('fill', axisTextColor)
+    .attr('text-anchor', 'end')
+    .attr('x', -10)
+    .attr('opacity', hemiKey === 'ipsilateral' ? 1 : 0); // show labels only on left plot
+  svg.append('g')
+    .attr('transform', `translate(${plotRight},0)`)
+    .call(yAxisRight)
+    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
+    .call(g => g.selectAll('line').remove())
+    .call(g => g.selectAll('text').remove());
 
   // Legend
   const legend = svg.append('g')
-    .attr('transform', `translate(${width - margin.right + 20}, ${margin.top})`);
+    .attr('transform', `translate(${plotRight - 4}, ${plotTop - 12})`);
+  legend.append('rect')
+    .attr('x', -6)
+    .attr('y', -6)
+    .attr('width', 64)
+    .attr('height', 32)
+    .attr('rx', 8)
+    .attr('fill', '#f8fafc')
+    .attr('stroke', '#e2e8f0');
   ['Vglut1','Vgat'].forEach((label, idx) => {
-    const row = legend.append('g').attr('transform', `translate(0, ${idx * 20})`);
+    const row = legend.append('g').attr('transform', `translate(4, ${idx * 16})`);
     row.append('rect').attr('width',14).attr('height',14).attr('rx',3).attr('fill', color(label)).attr('fill-opacity',0.15).attr('stroke', color(label));
-    row.append('text').attr('x', 20).attr('y',12).text(label).attr('fill','#374151').attr('font-size',12);
+    row.append('text').attr('x', 20).attr('y',11).text(label).attr('fill','#374151').attr('font-size',12);
   });
 }
 
@@ -469,9 +505,9 @@ function drawRabiesSingle(hemiKey, selector){
 function showTooltip(event, d){
   if(!tooltip) return;
   tooltip.hidden = false;
-  const semTxt = d.sem ? d.sem.toFixed(4) : 'NA';
+  const semTxt = d.semPerc ? d.semPerc.toFixed(2) + '%' : 'NA';
   const label = rabiesState.groupBy === 'genotype' ? `${d.group} (mean +/- sem)` : d.group;
-  tooltip.innerHTML = `<strong>${d.region}</strong><br/>${label}<br/>Mean load fraction: ${d.value.toFixed(4)}<br/>SEM: ${semTxt}<br/>n: ${d.n || 'NA'}`;
+  tooltip.innerHTML = `<strong>${d.region}</strong><br/>${label}<br/>Mean load fraction: ${d.valuePerc.toFixed(2)}%<br/>SEM: ${semTxt}<br/>n: ${d.n || 'NA'}`;
   const rect = tooltip.getBoundingClientRect();
   tooltip.style.left = `${event.pageX - rect.width/2}px`;
   tooltip.style.top = `${event.pageY - rect.height - 10}px`;
@@ -481,33 +517,13 @@ function hideTooltip(){
   if(tooltip) tooltip.hidden = true;
 }
 
+
 async function updateRabiesCharts(params){
   // Deprecated bar chart; Cleveland plot handled separately.
 }
 
 async function updateDoubleCharts(params){
-  const hemi = normalizeHemisphere(params?.laterality);
-  try{
-    const data = await fetchFluorSummary('double_injection', hemi, params?.mouse);
-    const values = data.map(d => ({
-      region: d.region_name,
-      pixels: d.region_pixels_avg ?? 0,
-      load: d.load_avg ?? 0
-    })).sort((a,b) => b.pixels - a.pixels).slice(0, 20);
-    const spec = {
-      data: { values },
-      mark: 'bar',
-      encoding: {
-        x: { field:'pixels', type:'quantitative', title:'Avg pixels' },
-        y: { field:'region', type:'nominal', sort:'-x', title:'Region' },
-        color: { field:'pixels', type:'quantitative', legend:null }
-      }
-    };
-    embedVL('double_compare', spec);
-  }catch(err){
-    console.warn('Double chart failed', err);
-    embedVL('double_compare', { data:{values:[]}, mark:'bar', encoding:{} });
-  }
+  // Placeholder for future double injection visuals
 }
 
 async function updateRegionalCharts(params){
@@ -522,7 +538,6 @@ async function updateRegionalCharts(params){
   loadSubjects();
   loadSamples();
   loadFiles();
-  syncGlobalFilters();
   loadRabiesData();
 })();
 
@@ -754,8 +769,7 @@ registerBtn?.addEventListener('click', async () => {
     setGuidance('Add all three quantification files: bilateral, ipsilateral, and contralateral.');
     return;
   }
-  const hemiVal = lateralitySelect?.value;
-  const hemisphere = mapLateralityToApi(!hemiVal ? 'all' : hemiVal);
+  const hemisphere = 'bilateral';
   const experimentType = modality === 'rabies' ? 'rabies' : 'double_injection';
   const sessionId = 'auto';
 
@@ -1076,13 +1090,28 @@ async function checkDuplicatePreflight({ force=false } = {}){
 }
 async function fetchJson(url){
   const res = await fetch(url);
-  if(!res.ok) throw new Error(await res.text());
-  return res.json();
+  const ct = res.headers.get('content-type') || '';
+  // Prefer JSON but gracefully fallback to text for clearer errors.
+  const getText = () => res.text().catch(() => 'Unable to read response body.');
+  if(!res.ok){
+    const detail = await getText();
+    throw new Error(`${res.status} ${res.statusText || ''}`.trim() + (detail ? ` — ${detail}` : ''));
+  }
+  if(ct.includes('application/json')){
+    return res.json();
+  }
+  const text = await getText();
+  try{
+    return JSON.parse(text);
+  }catch(_){
+    throw new Error('Expected JSON but received non-JSON response.');
+  }
 }
 
 async function loadSubjects(){
   try{
     const subjects = await fetchJson(`${API}/subjects`);
+    const mouseSelect = document.getElementById('mouseSelect');
     if(mouseSelect){
       mouseSelect.innerHTML = '<option value="all" selected>All</option>' +
         subjects.map(s => `<option value="${s.subject_id}">${s.subject_id}</option>`).join('');

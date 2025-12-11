@@ -31,9 +31,9 @@ body{
 
 /* Hero */
 .hero{ padding-top:96px; padding-bottom:24px; background:var(--paper-alt) }
-.container{ max-width:1600px; margin:0 auto; padding:0 20px }
-.container--wide{ max-width:1600px; }
-@media(min-width:1600px){ .container--wide{ max-width:1600px; } }
+.container{ max-width:1400px; margin:0 auto; padding:0 16px }
+.container--wide{ max-width:1400px; }
+@media(min-width:1400px){ .container--wide{ max-width:1400px; } }
 .grid{ display:grid; grid-template-columns:1fr; gap:24px }
 @media(min-width:960px){ .grid{ grid-template-columns: 7fr 5fr } }
 .col{ align-self:center }
@@ -47,12 +47,6 @@ h1{ font-size:40px; line-height:1.1; margin:8px 0 0 }
 .card{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:0 4px 18px rgba(0,0,0,.06) }
 .card__title{ margin:0; font-size:14px; font-weight:600 }
 .card__head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px }
-.filters{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px }
-.filters--single{ grid-template-columns:1fr }
-.filters label{ display:block; color:#6b7280; font-size:14px }
-.filters input[type=range]{ width:100% }
-.filters select, .filters input[type=text], .filters input[type=search]{ width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:#fff }
-.range-meta{ display:flex; justify-content:space-between; font-size:12px; color:#9ca3af; margin-top:4px }
 .help{ margin-top:10px; font-size:12px; color:#9ca3af }
 
 /* Sections */
@@ -120,31 +114,59 @@ h2,h3,h4{ margin:6px 0 }
   border-radius:12px;
   color:#475569;
 }
+.viz-holder__title--subtle{
+  margin-bottom:8px;
+  font-size:16px;
+  font-weight:600;
+  background:transparent;
+  border:none;
+  padding:8px 0;
+  color:#1f2937;
+}
 
 /* Rabies Cleveland plot layout */
 .rabies-layout{
   display:grid;
-  grid-template-columns:360px 1fr;
-  gap:28px;
+  grid-template-columns:260px 1fr;
+  gap:0;
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 4px 18px rgba(15,23,42,0.04);
+  overflow:hidden;
 }
 .rabies-sidebar{
-  background:var(--surface-subtle);
-  border:1px solid var(--border);
-  border-radius:16px;
-  padding:16px;
+  background:#fff;
+  border-right:1px solid var(--border);
+  padding:14px 12px;
   height:100%;
   overflow:auto;
 }
 .sidebar-block{ margin-bottom:16px; }
+.sidebar-block + .sidebar-block{
+  border-top:1px solid #eceff3;
+  padding-top:12px;
+}
 .sidebar-label{ display:block; font-weight:600; color:var(--text-strong); margin-bottom:6px; }
-.sidebar-radio{ display:block; font-weight:500; color:var(--text-muted); margin:4px 0; }
-.sidebar-radio input{ margin-right:8px; }
+.sidebar-radio{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-weight:500;
+  font-size:14px;
+  color:var(--text-muted);
+  margin:4px 0;
+}
+.sidebar-radio input{
+  margin:0;
+  accent-color: var(--accent2);
+}
 .rabies-sidebar input[type="search"], .rabies-sidebar select{
   width:100%;
-  padding:8px 10px;
-  border:1px solid var(--border);
-  border-radius:10px;
+  padding:9px 12px;
+  border:1px solid #dfe3eb;
+  border-radius:12px;
   font-family:var(--font);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,0.02);
 }
 .region-dropdown{ position:relative; }
 .region-list{
@@ -160,18 +182,51 @@ h2,h3,h4{ margin:6px 0 }
   display:block;
   font-size:13px;
 }
+.region-list::-webkit-scrollbar{ width:8px; }
+.region-list::-webkit-scrollbar-track{ background:#f8fafc; border-radius:999px; }
+.region-list::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:999px; }
+.region-list::-webkit-scrollbar-thumb:hover{ background:#94a3b8; }
 .region-item{
   display:flex;
   align-items:center;
   gap:8px;
-  padding:4px 6px;
-  border-radius:8px;
+  padding:6px 8px;
+  border-radius:10px;
   color:var(--text-muted);
 }
 .region-item:hover{ background:var(--surface-subtle); }
-.rabies-main{ position:relative; }
-.dotplot-container{ width:100%; min-height:420px; }
-.dotplot-grid{ display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start; }
+.rabies-main{ position:relative; padding:16px; }
+.dotplot-container{
+  width:100%;
+  min-height:560px;
+  min-width:560px;
+  aspect-ratio:1 / 1; /* keep boxes square; height follows width (can grow wider but not skinnier) */
+}
+.dotplot-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(420px, 1fr));
+  gap:0;
+  align-items:start;
+  padding:4px 0 8px;
+  background:#fff;
+  justify-items:center;
+  max-width:980px;
+  margin:0 auto;
+}
+.dotplot-panel{
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  width:100%;
+  align-items:center;
+}
+.dotplot-subtitle{ padding-left:12px; margin:0; }
+.sidebar-help{
+  margin:4px 0 8px;
+  font-size:12px;
+  color:#6b7280;
+}
 .dotplot-subtitle{ font-weight:600; color:var(--text-muted); margin-bottom:8px; }
 .tooltip{
   position:absolute;
@@ -197,6 +252,21 @@ h2,h3,h4{ margin:6px 0 }
   gap:6px;
   flex-wrap:wrap;
 }
+.rabies-sidebar .btn{
+  border-radius:12px;
+  border:1px solid #dfe3eb;
+  background:#f8fafc;
+  color:#0f172a;
+  padding:8px 10px;
+  box-shadow:0 1px 2px rgba(15,23,42,0.05);
+}
+.rabies-sidebar .btn:hover{
+  border-color:#cbd5e1;
+  background:#eef2f7;
+}
+.rabies-sidebar .btn--ghost{
+  background:transparent;
+}
 .rabies-status{
   margin-top:10px;
   color:#6b7280;
@@ -217,22 +287,9 @@ h2,h3,h4{ margin:6px 0 }
 .btn--ghost:hover{ border-color:#d1d5db }
 
 /* Back to top */
-.to-top{
-  position:fixed; right:16px; bottom:16px; padding:8px 12px; border:none; border-radius:999px;
-  background:var(--accent2); color:#fff; cursor:pointer; display:none; box-shadow:0 6px 18px rgba(0,0,0,.12)
-}
+/* Back to top removed */
 
 /* Dark theme */
-.dark body{ background:#0b0f1a; color:#e5e7eb }
-.dark .nav{ background:rgba(10,13,22,.7); border-color:#1f2937 }
-.dark .brand{ color:#e5e7eb }
-.dark .nav__links a{ color:#cbd5e1 }
-.dark .nav__links a:hover{ color:var(--accent2) }
-.dark .hero{ background:#0f1320 }
-.dark .card, .dark .viz-card{ background:#0f1424; border-color:#1f2937 }
-.dark .section{ background:#0b0f1a; border-color:#1f2937 }
-.dark .section--alt{ background:#0f1320 }
-.dark .muted, .dark .caption{ color:#9aa4b2 }
 
 
 /* Upload components */

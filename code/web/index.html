@@ -15,9 +15,6 @@
 
   <!-- D3 & Vega (for future charts) -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
-  <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
 </head>
 
 <body>
@@ -30,7 +27,6 @@
       <a href="#datasets">Datasets</a>
       <a href="#upload">Upload</a>
       <a href="#viewer">Napari Viewer</a>
-      <a href="#methods">Methods</a>
       </div>    </div>
   </nav>
 
@@ -48,44 +44,6 @@
           <span class="dot" style="--c:var(--accent2)"></span> Injection/Expression
           <span class="dot" style="--c:var(--accent3)"></span> Regional Summaries
         </div>
-      </div>
-
-      <div class="col card" data-aos="fade-up" data-aos-delay="100">
-        <h2 class="card__title"> Filters </h2>
-        <div class="filters">
-          <label>Date Range
-            <input id="dateRange" type="range" min="2018" max="2025" value="2025" />
-            <div class="range-meta"><span>2018</span><span id="dateVal">2025</span></div>
-          </label>
-
-          <label>Genotype
-            <select id="genotypeSelect">
-              <option value="all" selected>All</option>
-              <option value="vglut1">vglut1</option>
-              <option value="vgat">vgat</option>
-            </select>
-          </label>
-
-          <label>Laterality
-            <select id="lateralitySelect">
-              <option value="all" selected>All</option>
-              <option value="bilateral">Bilateral</option>
-              <option value="ipsi">Ipsilateral</option>
-              <option value="contra">Contralateral</option>
-            </select>
-          </label>
-
-          <label>Mouse ID
-            <select id="mouseSelect">
-              <option value="all" selected>All</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="D">D</option>
-              <option value="E">E</option>
-            </select>
-          </label>
-        </div>
-        <p class="help">Filters will sync across tabs and charts (to be wired later).</p>
       </div>
     </div>
   </header>
@@ -132,7 +90,6 @@
               </label>
               <div id="rabiesRegionList" class="region-list"></div>
               <div class="sidebar-actions">
-                <span id="rabiesSelectedCount" class="pill pill--muted">0 selected</span>
                 <div class="sidebar-actions__buttons">
                   <button id="rabiesResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
                   <button id="rabiesClearBtn" class="btn btn--mini btn--ghost" type="button">Clear</button>
@@ -140,19 +97,19 @@
               </div>
             </div>
             <div class="sidebar-block">
-              <div class="sidebar-label">Group by</div>
-              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="genotype" checked /> Genotype (vGLUT1 vs vGAT)</label>
-              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="subject" /> Subject (individual animals)</label>
+              <div class="sidebar-label">View mode</div>
+              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="genotype" checked /> Region Signal Averaged </label>
+              <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="subject" /> Region Signal Per Mouse </label>
             </div>
           </aside>
           <div class="rabies-main">
-            <div class="viz-holder__title">vGLUT1 vs vGAT Projections (Rabies)</div>
+            <div class="viz-holder__title viz-holder__title--subtle">vGLUT1 vs vGAT projections in olfactory regions (rabies)</div>
             <div class="dotplot-grid">
-              <div>
+              <div class="dotplot-panel">
                 <div class="dotplot-subtitle">Ipsilateral</div>
                 <div id="rabiesDotPlotIpsi" class="dotplot-container"></div>
               </div>
-              <div>
+              <div class="dotplot-panel">
                 <div class="dotplot-subtitle">Contralateral</div>
                 <div id="rabiesDotPlotContra" class="dotplot-container"></div>
               </div>
@@ -292,37 +249,6 @@
   </div>
 </section>
 
-  <!-- Methods -->
-  <section id="methods" class="section">
-    <div class="container grid-two" data-aos="fade-up">
-      <div>
-        <p class="kicker">Methods</p>
-        <h4>Preprocessing</h4>
-        <ul class="list">
-          <li>Standardize column names; coerce numeric features; drop unused columns (e.g., Load %, Area unit).</li>
-          <li>Compute averages of <strong>Region pixels</strong> per brain region across mice by default.</li>
-          <li>Expose API endpoints for each dataset; include query params for filters above.</li>
-        </ul>
-      </div>
-      <div>
-        <h4>Tech Stack</h4>
-        <ul class="list">
-          <li>Frontend: vanilla HTML/CSS/JS with Vega‑Lite & D3 stubs.</li>
-          <li>Backend: FastAPI/Flask + PostgreSQL schemas per dataset group.</li>
-          <li>Design: minimal, Inter typeface, soft cards, accent palette.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <footer class="footer">
-    <div class="container">
-      © 2025 Northeastern University · <span class="accent2">Olfactory Data Visualizer</span>
-    </div>
-  </footer>
-
-  <!-- Back to top -->
-  <button id="toTop" class="to-top">Top</button>
 
   <!-- Scripts -->
   <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
