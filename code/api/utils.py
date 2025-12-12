@@ -10,6 +10,7 @@ def add_load_fraction(
     mouse_id_field: str = "subject_id",
     load_field: str = "load",
     out_field: str = "load_fraction",
+    totals_map: Mapping | None = None,
 ):
     """
     Parameters:
@@ -26,14 +27,21 @@ def add_load_fraction(
     """
     rows = list(rows)
     totals = defaultdict(float)
-    for r in rows:
-        try:
-            val = r.get(load_field)
-            if val is None:
+    if totals_map:
+        for k, v in totals_map.items():
+            try:
+                totals[k] = float(v) if v is not None else 0.0
+            except Exception:
+                totals[k] = 0.0
+    else:
+        for r in rows:
+            try:
+                val = r.get(load_field)
+                if val is None:
+                    continue
+                totals[r.get(mouse_id_field)] += float(val)
+            except Exception:
                 continue
-            totals[r.get(mouse_id_field)] += float(val)
-        except Exception:
-            continue
     enriched = []
     for r in rows:
         r_copy = dict(r)

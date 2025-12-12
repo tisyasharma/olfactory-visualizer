@@ -31,11 +31,6 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
             existing_session_ids.append(row.session_id)
     extra_regions = []
 
-    seen_checksums = set()
-    with engine.connect() as conn:
-        for row in conn.execute(text("SELECT checksum FROM ingest_log WHERE status = 'success' AND checksum IS NOT NULL")):
-            seen_checksums.add(row.checksum)
-
     for root, dirs, files in os.walk(DATA_ROOT):
         for file in files:
             if not file.endswith(".csv"):
@@ -56,15 +51,14 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
             subject_id = SUBJECT_MAP[matched_key]["subject"]
             exp_type = "rabies" if "rabies" in matched_key.lower() else "double_injection"
             hemi = detect_hemisphere(root, file)
+            if hemi not in ("left","right","bilateral"):
+                print(f"   ⚠️ Skipping {file}: unrecognized hemisphere '{hemi}'")
+                continue
 
             print(f"  Processing {file} ({hemi}) -> {subject_id}")
 
             csv_path = os.path.join(root, file)
             chk = file_sha256(Path(csv_path))
-            if chk in seen_checksums:
-                stats["counts_skipped_dupe_files"] = stats.get("counts_skipped_dupe_files", 0) + 1
-                continue
-
             df = load_table(csv_path)
 
             required_cols = {"Region ID", "Region name", "Region pixels", "Region area", "Load"}
@@ -141,7 +135,6 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
             count_rows.extend(df_counts.to_dict(orient="records"))
             df = df_counts
 
-            seen_checksums.add(chk)
             stats["counts_ingested_rows"] = stats.get("counts_ingested_rows", 0) + len(df)
             with engine.begin() as conn:
                 conn.execute(

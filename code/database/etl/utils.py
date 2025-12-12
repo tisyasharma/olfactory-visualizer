@@ -24,14 +24,19 @@ def clean_numeric(val):
 
 
 def detect_hemisphere(root: str, filename: str) -> str:
-    parts = [p.lower() for p in Path(root).parts]
+    """
+    Infer hemisphere from the filename prefix:
+    - left_...  -> left
+    - right_... -> right
+    - otherwise -> bilateral (no prefix)
+    We avoid scanning folder names so mixed strings don't mislabel the files.
+    """
     fname = filename.lower()
-    if "left" in parts or "left" in fname:
+    stem = Path(fname).name
+    if stem.startswith("left_") or stem.startswith("left-"):
         return "left"
-    if "right" in parts or "right" in fname:
+    if stem.startswith("right_") or stem.startswith("right-"):
         return "right"
-    if "both" in parts or "bilateral" in fname:
-        return "bilateral"
     return "bilateral"
 
 

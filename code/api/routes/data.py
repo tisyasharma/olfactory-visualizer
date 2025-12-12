@@ -287,12 +287,28 @@ def region_load_summary(
     if hemisphere:
         where.append("rc.hemisphere = :hemi")
         params["hemi"] = hemisphere
+    else:
+        # Default to left/right to avoid double-counting bilateral rows
+        where.append("rc.hemisphere IN ('left','right')")
     if where:
         q += " WHERE " + " AND ".join(where)
     q += " ORDER BY rc.subject_id, br.name LIMIT :lim"
     params["lim"] = limit
     rows = fetch_all(q, params)
-    rows = add_load_fraction(rows, mouse_id_field="subject_id", load_field="load", out_field="load_fraction")
+    # Compute totals per subject from ipsilateral (right) only to normalize to injection size
+    total_rows = fetch_all(
+        """
+        SELECT rc.subject_id, SUM(rc.load) AS total_load
+        FROM region_counts rc
+        JOIN subjects s ON s.subject_id = rc.subject_id
+        WHERE (:exp IS NULL OR s.experiment_type = :exp)
+          AND rc.hemisphere = 'right'
+        GROUP BY rc.subject_id
+        """,
+        {"exp": experiment_type} if experiment_type else {"exp": None},
+    )
+    totals_map = {r["subject_id"]: r["total_load"] for r in total_rows}
+    rows = add_load_fraction(rows, mouse_id_field="subject_id", load_field="load", out_field="load_fraction", totals_map=totals_map)
 
     # Group by region, hemisphere, genotype
     grouped = {}
@@ -375,12 +391,27 @@ def region_load_by_mouse(
     if hemisphere:
         where.append("rc.hemisphere = :hemi")
         params["hemi"] = hemisphere
+    else:
+        # Default to left/right to avoid double-counting bilateral rows
+        where.append("rc.hemisphere IN ('left','right')")
     if where:
         q += " WHERE " + " AND ".join(where)
     q += " ORDER BY rc.subject_id, br.name LIMIT :lim"
     params["lim"] = limit
     rows = fetch_all(q, params)
-    rows = add_load_fraction(rows, mouse_id_field="subject_id", load_field="load", out_field="load_fraction")
+    total_rows = fetch_all(
+        """
+        SELECT rc.subject_id, SUM(rc.load) AS total_load
+        FROM region_counts rc
+        JOIN subjects s ON s.subject_id = rc.subject_id
+        WHERE (:exp IS NULL OR s.experiment_type = :exp)
+          AND rc.hemisphere = 'right'
+        GROUP BY rc.subject_id
+        """,
+        {"exp": experiment_type} if experiment_type else {"exp": None},
+    )
+    totals_map = {r["subject_id"]: r["total_load"] for r in total_rows}
+    rows = add_load_fraction(rows, mouse_id_field="subject_id", load_field="load", out_field="load_fraction", totals_map=totals_map)
     results = []
     for r in rows:
         geno = derive_genotype(r.get("details"), r.get("experiment_type"))

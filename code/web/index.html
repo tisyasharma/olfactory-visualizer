@@ -104,7 +104,6 @@
                 <div class="abstract-plain__meta">
                   <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span></span>  Input Mapping: Monosynaptic Rabies Tracing</p>
                   <div class="abstract-plain__title-row">
-                    <h2 class="abstract-plain__title">Monosynaptic Input Mapping</h2>
                   </div>
                 </div>
                 <button id="rabiesAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">View Experimental Rationale</button>
@@ -123,12 +122,20 @@
               </div>
             </div>
             <div class="zoom-controls-row">
-              <div class="zoom-controls">
-                <span id="zoomLevel" class="zoom-controls__level">1.0x</span>
-                <span class="zoom-controls__divider">|</span>
-                <button id="resetZoomBtn" class="zoom-controls__btn" type="button">Reset</button>
+              <div class="zoom-controls-group">
+                <div class="view-switcher" role="group" aria-label="Select visualization type">
+                  <button class="view-switcher__btn is-active" type="button" data-rabies-view="dot">Dot Plot</button>
+                  <button class="view-switcher__btn" type="button" data-rabies-view="box">Box Plot</button>
+                  <button class="view-switcher__btn" type="button" data-rabies-view="bar">Diverging Bars</button>
+                </div>
+                <div class="zoom-controls">
+                  <span id="zoomLevel" class="zoom-controls__level">1.0x</span>
+                  <span class="zoom-controls__divider">|</span>
+                  <button id="resetZoomBtn" class="zoom-controls__btn" type="button">Reset</button>
+                </div>
               </div>
             </div>
+            <div class="figure-head figure-head--center" id="rabiesFigureHead"></div>
             <div class="figure-panel">
               <div class="panel-a">
                 <div id="rabiesDotPlotIpsi" class="dotplot-container"></div>
@@ -158,7 +165,10 @@
                       </span>
                       <span>THE METRIC</span>
                     </div>
-                  <p class="insight-text">The X-axis displays <strong>Relative Input Source Strength (% of Total Signal)</strong>. To correct for variable viral efficiency, we normalize the fluorescence signal of each region against the total inputs found in that specific mouse. This reveals the proportion of total connectivity derived from each input source.</p>
+                  <ul class="insight-text" style="margin:0; padding-left:18px;">
+                    <li style="margin-bottom:4px;"><strong>Log10 Scale:</strong> The X-axis uses a Log10 scale normalized to the <strong>Injection Size</strong> (Total Ipsilateral Signal). This accounts for variability in viral uptake between subjects.</li>
+                    <li><strong>Magnitude:</strong> A visual distance of one unit represents a <strong>10-fold difference</strong> in connection strength.</li>
+                  </ul>
                   </div>
                   <div class="figure-insight__divider" aria-hidden="true"></div>
                   <div class="figure-insight__block">
@@ -175,15 +185,12 @@
                         <path d="M17.2 6.8 14.7 9.3"></path>
                         <circle cx="12" cy="12" r="2.6"></circle>
                         </svg>
-                      </span>
+                  </span>
                     <span>THE SIGNAL: VGLUT1 vs. VGAT</span>
                     </div>
-                  <p class="insight-text">Compare the position of the Excitatory (VGLUT1) and Inhibitory (VGAT) data points.</p>
-                  <ul class="insight-list">
-                    <li><strong>Balanced Inputs:</strong> If dots are aligned vertically, the source targets both cell types equally (e.g., Main Olfactory Bulb).</li>
-                    <li><strong>Specialized Inputs:</strong> If one genotype is shifted significantly to the right, the source exerts specialized control (e.g., inputs 
-                                                             from the Bed Nucleus of the Accessory Olfactory Tract preferentially target inhibitory subpopulations to gate 
-                                                             information flow).</li>
+                  <ul class="insight-text" style="margin:0; padding-left:18px;">
+                    <li><strong>VGLUT1 (Excitatory):</strong> Primary driver inputs to the circuit.</li>
+                    <li><strong>VGAT (Inhibitory):</strong> Gating/control inputs within the circuit.</li>
                   </ul>
                   </div>
                 </div>
@@ -198,9 +205,7 @@
                   </span>
                   <span>PANEL COMPARISON: Ipsilateral vs. Contralateral</span>
                 </div>
-                <p class="insight-text">Use the side-by-side plots to contrast different scales of connectivity. The <strong>Ipsilateral Plot</strong> (Left) visualizes <strong>Local Recurrent Inputs</strong>
-                                        from within the same hemisphere, while the <strong>Contralateral Plot</strong> (Right) visualizes <strong>Long-Range Commissural Inputs</strong> originating from the
-                                        opposite hemisphere.</p>
+                  <p class="insight-text"><strong>Ipsilateral:</strong> Shows robust, local inputs from the same hemisphere as the injection. These values are naturally higher due to proximity and the presence of starter cells.<br/><strong>Contralateral:</strong> Shows sparse, long-range projections from the opposite hemisphere. These are the specific interhemispheric connections characterized in this study.</p>
               </div>
               </div>
             </details>
