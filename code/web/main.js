@@ -23,8 +23,6 @@ tabs.forEach(({btn, panel}) => {
 // Collapsible abstract for rabies tab
 const rabiesAbstractToggle = document.getElementById('rabiesAbstractToggle');
 const rabiesAbstractBody = document.getElementById('rabiesAbstractBody');
-const rationaleShowLabel = '[+] View Experimental Rationale';
-const rationaleHideLabel = '[-] Hide Experimental Rationale';
 rabiesAbstractToggle?.addEventListener('click', () => {
   const isExpanded = rabiesAbstractToggle.getAttribute('aria-expanded') === 'true';
   rabiesAbstractToggle.setAttribute('aria-expanded', String(!isExpanded));
@@ -32,11 +30,8 @@ rabiesAbstractToggle?.addEventListener('click', () => {
     rabiesAbstractBody.hidden = isExpanded;
     rabiesAbstractBody.style.maxHeight = isExpanded ? '0px' : '800px';
   }
-  rabiesAbstractToggle.textContent = isExpanded ? rationaleShowLabel : rationaleHideLabel;
+  rabiesAbstractToggle.textContent = isExpanded ? 'View Experimental Rationale' : 'Hide Experimental Rationale';
 });
-if(rabiesAbstractToggle){
-  rabiesAbstractToggle.textContent = rationaleShowLabel;
-}
 
 // Switch tab buttons and panels for the dataset sections. 
 function activateTab(activeBtnId, activePanelId){
@@ -119,7 +114,6 @@ const tooltip = document.getElementById('rabiesTooltip');
 const groupRadios = document.querySelectorAll('input[name="rabiesGroupBy"]');
 const rabiesResetBtn = document.getElementById('rabiesResetBtn');
 const rabiesClearBtn = document.getElementById('rabiesClearBtn');
-const rabiesStatus = document.getElementById('rabiesStatus');
 const rabiesMouseCountEl = document.getElementById('rabiesMouseCount');
 const zoomLevelEl = document.getElementById('zoomLevel');
 const resetZoomBtn = document.getElementById('resetZoomBtn');
@@ -163,12 +157,6 @@ rabiesClearBtn?.addEventListener('click', () => {
   renderRegionList();
   drawRabiesDotPlot();
 });
-
-function setRabiesStatus(msg, tone='muted'){
-  if(!rabiesStatus) return;
-  rabiesStatus.textContent = msg || '';
-  rabiesStatus.className = `rabies-status ${tone}`;
-}
 
 function setRabiesMouseCount(n){
   if(!rabiesMouseCountEl) return;
@@ -217,7 +205,6 @@ function renderRegionList(){
 }
 async function loadRabiesData(){
   rabiesState.loading = true;
-  setRabiesStatus('Loading rabies data…', 'muted');
   const treePromise = !rabiesState.regionTreeCached
     ? fetchJson(`${API}/regions/tree`).catch(err => {
         console.warn('Region tree load failed', err);
@@ -263,11 +250,8 @@ async function loadRabiesData(){
     rabiesState.regions = rabiesState.allRegions;
     renderRegionList();
     drawRabiesDotPlot();
-    setRabiesStatus(allData.length ? 'Showing normalized load fractions.' : 'No rabies data found. Ingest data to populate the plot.', allData.length ? 'muted' : 'note');
   }catch(err){
     console.warn('Rabies data load failed', err);
-    const msg = err?.message || 'Rabies data load failed. Check the API and try again.';
-    setRabiesStatus(msg, 'note');
   }finally{
     rabiesState.loading = false;
   }

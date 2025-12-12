@@ -12,8 +12,17 @@ def add_load_fraction(
     out_field: str = "load_fraction",
 ):
     """
-    Add per-mouse load_fraction (load / sum(load) per mouse) to a list of row dicts.
-    Expects rows to have a load value; returns a new list with an added key.
+    Parameters:
+        rows (Iterable[Mapping]): Row dicts to enrich.
+        mouse_id_field (str): Field name to group by (per-mouse).
+        load_field (str): Field name holding load values.
+        out_field (str): Field name to write load_fraction into.
+
+    Returns:
+        list[dict]: Copy of rows with load_fraction added.
+
+    Does:
+        Computes load_fraction per mouse (row load / total load per mouse) and appends it to each row copy.
     """
     rows = list(rows)
     totals = defaultdict(float)
@@ -39,7 +48,18 @@ def add_load_fraction(
     return enriched
 
 
-def derive_genotype(details: str = None, experiment_type: str = None) -> str:
+def derive_genotype(details: str = None, experiment_type: str = None):
+    """
+    Parameters:
+        details (str | None): Freeform subject details.
+        experiment_type (str | None): Experiment type tag.
+
+    Returns:
+        str: Genotype label ('Vgat', 'Vglut1', or 'other').
+
+    Does:
+        Quick string-based tagger to pick a genotype label from subject notes/experiment type.
+    """
     """
     Quick string-based genotype tag so the client doesn't have to guess.
     """

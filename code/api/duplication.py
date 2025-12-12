@@ -49,7 +49,20 @@ def register_batch(engine, batch_checksum: str, file_hashes: List[str], note: Op
             )
 
 
-def check_microscopy_duplicate(engine, batch_checksum: str, file_hashes: List[str], overlap_threshold: float = DEFAULT_OVERLAP_THRESHOLD) -> Optional[str]:
+def check_microscopy_duplicate(engine, batch_checksum: str, file_hashes: List[str], overlap_threshold: float = DEFAULT_OVERLAP_THRESHOLD):
+    """
+    Parameters:
+        engine: SQLAlchemy engine/connection.
+        batch_checksum (str): Combined hash of the upload batch.
+        file_hashes (list[str]): Individual file SHA256 hashes.
+        overlap_threshold (float): Fraction of overlap to consider a duplicate.
+
+    Returns:
+        str | None: Reason string when duplicate detected; None otherwise.
+
+    Does:
+        Checks ingest_log, existing batches, per-file hashes, exact set matches, and strong overlap to flag duplicates.
+    """
     """
     Tell us why this upload looks like a repeat (or return None if it's fresh).
     Checks batch hash, per-file hash, and high-overlap batches.

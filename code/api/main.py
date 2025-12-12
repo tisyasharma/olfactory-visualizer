@@ -18,7 +18,16 @@ app.mount("/code/web", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
 @app.get("/")
 def root():
-    """Redirect root to the web dashboard."""
+    """
+    Parameters:
+        None
+
+    Returns:
+        RedirectResponse: Redirect to the web dashboard.
+
+    Does:
+        Redirects the API root to serve the frontend index.
+    """
     return RedirectResponse(url="/code/web/index.html")
 
 

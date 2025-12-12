@@ -32,13 +32,22 @@
 
   <!-- Hero -->
   <header id="top" class="hero">
-    <div class="container grid">
-      <div class="col" data-aos="fade-up">
+    <div class="container hero-shell" data-aos="fade-up">
+      <div class="hero-shell__left">
         <p class="kicker">Tisya Sharma · Capstone</p>
         <h1>Olfactory Data Visualizer</h1>
-        <h2 class="hero-subtitle">The Interhemispheric Connectivity of <br>the Anterior Olfactory Nucleus</h2>
         <p class="lede">
-          Dashboard for fluorescence‑based circuit tracing. <!-- regional AON expression temporarily omitted -->
+          Dashboard for AON Interhemispheric Connections
+          <a class="info-link" href="#footer" aria-label="Jump to footer details">
+            <span aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="10" cy="10" r="9" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M10 9.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                <circle cx="10" cy="6" r="0.9" fill="currentColor"/>
+              </svg>
+            </span>
+          </a>
+          <!-- regional AON expression temporarily omitted -->
         </p>
         <div class="legend legend--stacked">
           <div class="legend__item"><span class="dot" style="--c:var(--accent1)"></span><span>Input Mapping: Monosynaptic Rabies Tracing</span></div>
@@ -48,37 +57,6 @@
       </div>
     </div>
   </header>
-
-  <!-- About -->
-  <section id="about" class="section">
-    <div class="container narrow" data-aos="fade-up">
-      <p class="kicker">About</p>
-      <h2>AON Connectome Atlas</h2>
-      <p>
-        This dashboard is a tool to characterize the structural and molecular architecture of interhemispheric connections within the Anterior Olfactory Nucleus (AON).
-        By employing a combinatorial viral strategy (Dual-Viral Tracing), we have mapped the topographical organization and regional heterogeneity of commissural projections between AON subregions.
-        To define the connectivity logic, Monosynaptic Rabies Tracing was utilized to quantify synaptic inputs onto excitatory and inhibitory subpopulations.
-        Finally, we resolved the cellular identity of these long-range projecting neurons through Transcriptomic Profiling (snRNA-seq), identifying distinct molecular clusters that underlie bilateral olfactory integration.
-      </p>
-      <div class="module-grid">
-        <div class="module-card">
-          <p class="kicker">Module 1</p>
-          <h3>Interhemispheric Projection Topography</h3>
-          <p class="muted">Map axonal density and regional heterogeneity of commissural projections across AON subregions.</p>
-        </div>
-        <div class="module-card">
-          <p class="kicker">Module 2</p>
-          <h3>Monosynaptic Input Mapping</h3>
-          <p class="muted">Rabies tracing to quantify synaptic inputs onto excitatory and inhibitory subpopulations.</p>
-        </div>
-        <div class="module-card">
-          <p class="kicker">Module 3</p>
-          <h3>Transcriptomic Profiling</h3>
-          <p class="muted">snRNA-seq of projecting neurons to define molecular clusters driving bilateral integration.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <!-- Datasets Tabs -->
   <section id="datasets" class="section section--alt">
@@ -127,16 +105,18 @@
                   <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span></span>  Input Mapping: Monosynaptic Rabies Tracing</p>
                   <div class="abstract-plain__title-row">
                     <h2 class="abstract-plain__title">Monosynaptic Input Mapping</h2>
-                    <button id="rabiesAbstractToggle" class="abstract-plain__toggle" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">[+] View Experimental Rationale</button>
                   </div>
                 </div>
+                <button id="rabiesAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">View Experimental Rationale</button>
               </div>
               <div id="rabiesAbstractBody" class="abstract-plain__body" hidden>
                 <div class="muted small">
                   <p>
-                    To determine the connectivity logic of the AON, we utilized Monosynaptic Rabies Tracing. This approach allows for the retrograde labeling of direct presynaptic inputs onto defined starter populations. By targeting vGLUT1-Cre (excitatory) and vGAT-Cre (inhibitory) neurons, we quantified the convergence of inputs arising from the contralateral hemisphere, olfactory bulb, and top-down cortical structures.
-                  </p>
-                </div>
+                    To decode the connectivity logic of the Anterior Olfactory Nucleus (AON), we employed Monosynaptic Rabies Tracing. While anterograde tracing confirmed that 
+                    interhemispheric projections arise exclusively from excitatory (VGLUT1+) neurons, their postsynaptic impact depends on their targets. By using vGLUT1-Cre and 
+                    vGAT-Cre mice as starter populations, this experiment quantifies the synaptic convergence of brain-wide inputs onto specific AON cell types. This reveals whether 
+                    long-range inputs (such as those from the contralateral hemisphere, olfactory bulb, or hippocampus) differentially target excitation or inhibition to drive complex 
+                    processing like feedforward inhibition or temporal gating.
                 <div class="muted small">
                   Virus: EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=<span id="rabiesMouseCount">–</span> mice
                 </div>
@@ -153,12 +133,78 @@
               <div class="panel-a">
                 <div id="rabiesDotPlotIpsi" class="dotplot-container"></div>
               </div>
-              <div class="panel-b">
-                <div id="rabiesDotPlotContra" class="dotplot-container"></div>
-              </div>
+            <div class="panel-b">
+              <div id="rabiesDotPlotContra" class="dotplot-container"></div>
             </div>
+          </div>
+          <details class="figure-insight" open>
+              <summary>
+                <div class="figure-insight__header">
+                  <p class="kicker">How to Interpret This Data</p>
+                </div>
+                <span class="figure-insight__toggle" aria-hidden="true">View Interpretation</span>
+              </summary>
+              <div class="figure-insight__body">
+                <div class="figure-insight__grid">
+                  <div class="figure-insight__block">
+                    <div class="insight-label">
+                      <span class="insight-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="4" y="4" width="16" height="16" rx="3"></rect>
+                          <line x1="8" y1="16" x2="8" y2="12"></line>
+                          <line x1="12" y1="16" x2="12" y2="10"></line>
+                          <line x1="16" y1="16" x2="16" y2="8"></line>
+                        </svg>
+                      </span>
+                      <span>THE METRIC</span>
+                    </div>
+                  <p class="insight-text">The X-axis displays <strong>Relative Input Source Strength (% of Total Signal)</strong>. To correct for variable viral efficiency, we normalize the fluorescence signal of each region against the total inputs found in that specific mouse. This reveals the proportion of total connectivity derived from each input source.</p>
+                  </div>
+                  <div class="figure-insight__divider" aria-hidden="true"></div>
+                  <div class="figure-insight__block">
+                    <div class="insight-label">
+                      <span class="insight-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v4"></path>
+                        <path d="M6.8 6.8 9.3 9.3"></path>
+                        <path d="M3 12h4"></path>
+                        <path d="M6.8 17.2 9.3 14.7"></path>
+                        <path d="M12 21v-4"></path>
+                        <path d="M17.2 17.2 14.7 14.7"></path>
+                        <path d="M21 12h-4"></path>
+                        <path d="M17.2 6.8 14.7 9.3"></path>
+                        <circle cx="12" cy="12" r="2.6"></circle>
+                        </svg>
+                      </span>
+                    <span>THE SIGNAL: VGLUT1 vs. VGAT</span>
+                    </div>
+                  <p class="insight-text">Compare the position of the Excitatory (VGLUT1) and Inhibitory (VGAT) data points.</p>
+                  <ul class="insight-list">
+                    <li><strong>Balanced Inputs:</strong> If dots are aligned vertically, the source targets both cell types equally (e.g., Main Olfactory Bulb).</li>
+                    <li><strong>Specialized Inputs:</strong> If one genotype is shifted significantly to the right, the source exerts specialized control (e.g., inputs 
+                                                             from the Bed Nucleus of the Accessory Olfactory Tract preferentially target inhibitory subpopulations to gate 
+                                                             information flow).</li>
+                  </ul>
+                  </div>
+                </div>
+              <div class="insight-fullrow">
+                <div class="insight-label">
+                  <span class="insight-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+                      <path d="M8 9h8"></path>
+                      <path d="M8 13h5"></path>
+                    </svg>
+                  </span>
+                  <span>PANEL COMPARISON: Ipsilateral vs. Contralateral</span>
+                </div>
+                <p class="insight-text">Use the side-by-side plots to contrast different scales of connectivity. The <strong>Ipsilateral Plot</strong> (Left) visualizes <strong>Local Recurrent Inputs</strong>
+                                        from within the same hemisphere, while the <strong>Contralateral Plot</strong> (Right) visualizes <strong>Long-Range Commissural Inputs</strong> originating from the
+                                        opposite hemisphere.</p>
+              </div>
+              </div>
+            </details>
             <div id="rabiesTooltip" class="tooltip" hidden></div>
-            <div id="rabiesStatus" class="rabies-status muted small">Loading rabies data…</div>
           </div>
         </div>
       </div>
@@ -184,5 +230,28 @@
   <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
   <script src="utils.js"></script>
   <script src="main.js"></script>
+
+  <footer class="footer-info" id="footer">
+    <div class="container footer-simple">
+      <p class="kicker">Methods</p>
+      <div class="footer-simple__grid">
+        <div class="footer-simple__block">
+          <h3>Experimental Rationale</h3>
+          <p>
+            This dashboard integrates a multi-modal interrogation of the Anterior Olfactory Nucleus (AON). By combining Dual-Viral Mapping (Anatomy), Monosynaptic Rabies Tracing (Connectivity), and snRNA-sequencing (Identity), we characterize the circuit's structural organization and molecular profile. This resource aims to determine how bilateral olfactory information is integrated to drive behaviors like odor localization and memory.
+          </p>
+        </div>
+        <div class="footer-simple__block">
+          <h3>Key Findings</h3>
+          <ul>
+            <li><strong>Anatomy:</strong> Interhemispheric axons originate primarily from the Dorsolateral AON and are exclusively VGLUT1+ (excitatory).</li>
+            <li><strong>Connectivity:</strong> Long-range inputs synapse onto both Excitatory and Inhibitory populations, providing a circuit basis for feedforward inhibition.</li>
+            <li><strong>Identity:</strong> Transcriptomic profiling identifies 27 distinct clusters, pinpointing markers like Robo2 for commissural neurons.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="footer-meta">© Tisya Sharma 2025 AON Dashboard Credits to Murthy Laboratory</div>
+  </footer>
 </body>
 </html>

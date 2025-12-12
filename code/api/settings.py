@@ -1,8 +1,8 @@
 """
-Tiny config knobs for the API.
+Does:
+    Holds constants for duplication thresholds and subject id patterns. Tiny config for the API.
 """
 
-# Duplicate detection
 OVERLAP_THRESHOLD = 0.8
 DUPLICATE_MESSAGE = "These microscopy images were already ingested."
 

@@ -11,7 +11,20 @@ from code.database.connect import get_engine
 from code.database.etl.utils import get_or_create_session_id
 
 
-def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id: Optional[str]) -> str:
+def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id: Optional[str]):
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        subject_id (str): Subject id to resolve for.
+        experiment_type (str): Experiment type to pick defaults.
+        session_id (str | None): Requested session label or 'auto'.
+
+    Returns:
+        str: Resolved session id (normalized BIDS-like).
+
+    Does:
+        Normalizes/auto-assigns session ids, ensuring consistent sub-xxx_ses-yy formatting.
+    """
     sid = (session_id or "").strip()
     if sid.lower() == "auto" or sid == "":
         with engine.connect() as conn:
@@ -25,7 +38,18 @@ def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id
     return sid
 
 
-def sha256_path(path: Path, chunk_size: int = 1_048_576) -> str:
+def sha256_path(path: Path, chunk_size: int = 1_048_576):
+    """
+    Parameters:
+        path (Path): File path to hash.
+        chunk_size (int): Chunk size for streaming.
+
+    Returns:
+        str: SHA256 hex digest.
+
+    Does:
+        Streams a file and returns its SHA256 checksum.
+    """
     h = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(chunk_size), b""):
@@ -36,6 +60,17 @@ def sha256_path(path: Path, chunk_size: int = 1_048_576) -> str:
 
 
 def fetch_all(query: str, params: dict = None):
+    """
+    Parameters:
+        query (str): SQL query text.
+        params (dict | None): Optional bind parameters.
+
+    Returns:
+        list[dict]: Rows converted to dicts keyed by column name.
+
+    Does:
+        Runs a read-only query and returns all rows as dictionaries.
+    """
     engine = get_engine()
     with engine.connect() as conn:
         rows = conn.execute(text(query), params or {})

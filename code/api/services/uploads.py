@@ -13,9 +13,19 @@ from code.database.etl.counts_helper import prepare_counts_dataframe
 logger = logging.getLogger(__name__)
 
 
-def resolve_subject(existing_subjects: set, allowed_subjects: set, subject_id: Optional[str], experiment_type: str) -> str:
+def resolve_subject(existing_subjects: set, allowed_subjects: set, subject_id: Optional[str], experiment_type: str):
     """
-    Pick a subject id; keep the caller's when allowed, otherwise auto-number sub-rabXX/sub-dblXX.
+    Parameters:
+        existing_subjects (set): Subjects already in the DB.
+        allowed_subjects (set): Subjects allowed from config.
+        subject_id (str | None): Requested subject id (optional).
+        experiment_type (str): Experiment type to inform default prefix.
+
+    Returns:
+        str: Resolved/validated subject id.
+
+    Does:
+        Keeps caller subject when allowed; otherwise auto-assigns sub-rabXX/sub-dblXX using the right prefix.
     """
     if subject_id:
         if subject_id in existing_subjects or subject_id in allowed_subjects:
@@ -39,7 +49,15 @@ def resolve_subject(existing_subjects: set, allowed_subjects: set, subject_id: O
 
 def list_microscopy_files(engine, limit: int = 100):
     """
-    Lightweight list of microscopy files (id, session, hemi, path, sha) capped by limit.
+    Parameters:
+        engine: SQLAlchemy engine.
+        limit (int): Max rows to return.
+
+    Returns:
+        list[dict]: Microscopy file rows (id, session, hemisphere, path, sha).
+
+    Does:
+        Pulls limited microscopy_files metadata for quick lists.
     """
     with engine.connect() as conn:
         rows = conn.execute(
@@ -55,7 +73,17 @@ def list_microscopy_files(engine, limit: int = 100):
 
 
 def get_microscopy_file(engine, file_id: int):
-    """Grab one microscopy file row by id."""
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        file_id (int): Microscopy file primary key.
+
+    Returns:
+        dict | None: File metadata dict or None if missing.
+
+    Does:
+        Fetches a single microscopy_files row by id.
+    """
     with engine.connect() as conn:
         row = conn.execute(
             text(
@@ -69,7 +97,17 @@ def get_microscopy_file(engine, file_id: int):
 
 
 def list_region_counts(engine, limit: int = 100):
-    """Region count metadata (subject, region, file, hemi) capped by limit."""
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        limit (int): Max rows to return.
+
+    Returns:
+        list[dict]: Region count metadata rows.
+
+    Does:
+        Lists region_counts rows with subject/region/file/hemisphere.
+    """
     with engine.connect() as conn:
         rows = conn.execute(
             text(
@@ -84,7 +122,18 @@ def list_region_counts(engine, limit: int = 100):
 
 
 def get_region_counts_for_file(engine, file_id: int, limit: int = 1000):
-    """Region_count rows for a file_id, up to limit rows."""
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        file_id (int): Microscopy file id to fetch counts for.
+        limit (int): Max rows to return.
+
+    Returns:
+        list[dict]: Region count rows for the file id.
+
+    Does:
+        Grabs region_counts rows for a given file_id up to limit.
+    """
     with engine.connect() as conn:
         rows = conn.execute(
             text(
@@ -98,8 +147,18 @@ def get_region_counts_for_file(engine, file_id: int, limit: int = 1000):
     return [dict(r._mapping) for r in rows]
 
 
-def check_dup_by_hashes(engine, hashes: List[str]) -> Optional[str]:
-    """Microscopy duplicate check via batch checksum against prior ingests."""
+def check_dup_by_hashes(engine, hashes: List[str]):
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        hashes (list[str]): SHA256 hashes for the upload batch.
+
+    Returns:
+        str | None: Duplicate reason if found; None otherwise.
+
+    Does:
+        Computes batch checksum and checks microscopy duplicate tables/logs.
+    """
     hashes = [h for h in hashes or [] if h]
     if not hashes:
         return None
@@ -107,21 +166,49 @@ def check_dup_by_hashes(engine, hashes: List[str]) -> Optional[str]:
     return check_microscopy_duplicate(engine, batch_checksum, hashes)
 
 
-def compute_batch_hash(paths: List[Path]) -> (str, List[str]):
-    """Compute per-file SHA256s plus a batch checksum for the set."""
+def compute_batch_hash(paths: List[Path]):
+    """
+    Parameters:
+        paths (list[Path]): File paths to hash.
+
+    Returns:
+        tuple[str, list[str]]: Batch checksum and per-file hashes.
+
+    Does:
+        Calculates per-file SHA256 hashes and an order-insensitive batch hash.
+    """
     file_shas = [sha256_path(p) for p in paths]
     raw_batch_checksum = combine_hashes(paths)
     return raw_batch_checksum, file_shas
 
 
 def log_duplicate(reason: str):
-    """Log why we think something is a duplicate (for our own breadcrumbs)."""
+    """
+    Parameters:
+        reason (str): Duplicate reason message.
+
+    Returns:
+        None
+
+    Does:
+        Logs duplicate detection messages for debugging.
+    """
     if reason:
         logger.info("Duplicate detected: %s", reason)
 
 
-def check_counts_dup_by_hashes(engine, hashes: List[str]) -> Optional[str]:
-    """Duplicate check for quant CSVs based on batch checksum."""
+def check_counts_dup_by_hashes(engine, hashes: List[str]):
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        hashes (list[str]): SHA256 hashes of quant CSVs.
+
+    Returns:
+        str | None: Duplicate message if seen; None otherwise.
+
+    Does:
+        Uses combined hash to check ingest_log for prior successful CSV ingests.
+    """
     hashes = [h for h in hashes or [] if h]
     if not hashes:
         return None
@@ -136,8 +223,22 @@ def check_counts_dup_by_hashes(engine, hashes: List[str]) -> Optional[str]:
     return None
 
 
-def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, hemisphere: str, experiment_type: str) -> int:
-    """Quant CSV ingest for uploads (kept aligned with the ETL path)."""
+def ingest_counts_csv(engine, csv_path: Path, subject_id: str, session_id: str, hemisphere: str, experiment_type: str):
+    """
+    Parameters:
+        engine: SQLAlchemy engine.
+        csv_path (Path): Path to quant CSV.
+        subject_id (str): Subject id for rows.
+        session_id (str): Session id for rows.
+        hemisphere (str): Hemisphere label.
+        experiment_type (str): Experiment type.
+
+    Returns:
+        int: Number of rows inserted.
+
+    Does:
+        Normalizes a quant CSV via prepare_counts_dataframe, stages it, and inserts into region_counts with conflict handling.
+    """
     df_counts = prepare_counts_dataframe(engine, csv_path, subject_id, session_id, hemisphere)
     temp_table = "_region_counts_upload_stage"
     with engine.begin() as conn:
@@ -195,7 +296,18 @@ def prepare_microscopy_upload(
     file_paths: List[Path],
 ):
     """
-    Prep a microscopy upload: resolve subject/session, run duplicate checks, return metadata + hashes.
+    Parameters:
+        engine: SQLAlchemy engine.
+        subject_id (str | None): Optional subject id to keep/assign.
+        session_id (str): Session label or "auto".
+        experiment_type (str): Experiment type.
+        file_paths (list[Path]): Image file paths for the batch.
+
+    Returns:
+        tuple[str, str, str, list[str]]: Resolved subject_id, session_id, raw batch checksum, per-file hashes.
+
+    Does:
+        Resolves session, blocks duplicates, hashes files, and returns metadata ready for ingest.
     """
     with engine.connect() as conn:
         existing_subjects = {r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))}
@@ -234,27 +346,40 @@ def ingest_microscopy_files(
     file_shas: List[str],
 ):
     """
-    Run microscopy ingest and log it. Assumes dup checks already passed.
+    Parameters:
+        engine: SQLAlchemy engine.
+        subject_id (str): Subject id for ingest.
+        session_id (str): Session id for ingest.
+        hemisphere (str): Hemisphere label.
+        pixel_size_um (float): Pixel size in micrometers.
+        experiment_type (str): Experiment type.
+        file_paths (list[Path]): Uploaded image paths.
+        comments (str | None): Optional notes to persist on session.
+        raw_batch_checksum (str): Batch checksum for logging.
+        file_shas (list[str]): Per-file hashes.
+
+    Returns:
+        dict: Upload result with subject_id, session_id, and ingested file paths.
+
+    Does:
+        Converts/ingests microscopy files, updates session notes, logs ingest/batch hashes, and returns a summary.
     """
     from code.database.ingest_upload import ingest  # local import to avoid cycle
 
-    try:
-        ingested = ingest(
-            subject=subject_id,
-            session=session_id,
-            hemisphere=hemisphere,
-            files=file_paths,
-            pixel_size_um=pixel_size_um,
-            experiment_type=experiment_type,
-        )
-        if comments:
-            with engine.begin() as conn:
-                conn.execute(
-                    text("UPDATE sessions SET notes = :n WHERE session_id = :sid"),
-                    {"n": comments, "sid": session_id},
-                )
-    except Exception as e:
-        raise
+    ingested = ingest(
+        subject=subject_id,
+        session=session_id,
+        hemisphere=hemisphere,
+        files=file_paths,
+        pixel_size_um=pixel_size_um,
+        experiment_type=experiment_type,
+    )
+    if comments:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE sessions SET notes = :n WHERE session_id = :sid"),
+                {"n": comments, "sid": session_id},
+            )
 
     register_batch(engine, raw_batch_checksum, file_shas, note=f"microscopy upload {session_id}")
     with engine.begin() as conn:
