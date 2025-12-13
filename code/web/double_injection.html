@@ -14,8 +14,8 @@
       <a href="/code/web/index.html" class="brand">Olfactory DV</a>
       <div class="nav__links">
         <a href="/code/web/index.html">Home</a>
-        <a href="/code/web/rabies.html">Rabies Tracing</a>
         <a href="/code/web/double_injection.html" class="is-active">Dual Injection</a>
+        <a href="/code/web/rabies.html">Rabies Tracing</a>
         <a href="/code/web/scrna.html">scRNA-seq</a>
         <a href="/code/web/upload.html">Upload</a>
         <a href="/code/web/napari.html">Napari Viewer</a>
@@ -23,33 +23,22 @@
     </div>
   </nav>
 
-  <header style="padding-top: 80px; padding-bottom: 20px; text-align: center;">
-    <p class="kicker" style="color: var(--accent2);">TISYA SHARMA · CAPSTONE</p>
-    <h1 style="margin-bottom: 10px;">Dual Injection — Circuit Anatomy</h1>
-    <p class="muted">Dedicated view for the dual-viral tracing experiment.</p>
-  </header>
+  <header style="padding-top: 80px; padding-bottom: 20px;">
+    <div class="container" style="max-width: 1400px; text-align: left;">
 
   <div class="container" style="max-width: 1400px; padding-bottom: 60px;" data-aos="fade-up">
-    <div class="rabies-layout card" style="height: 800px;" data-aos="fade-up" data-aos-delay="80">
-      <aside class="rabies-sidebar">
+    <div class="rabies-layout card" data-aos="fade-up" data-aos-delay="80">
+      <aside class="rabies-sidebar rabies-sidebar--double">
         <div class="sidebar-block region-dropdown">
           <label class="sidebar-label">Search & Select Regions
-            <input id="doubleRegionSearch" type="search" placeholder="Type to search..." autocomplete="off" />
+            <input id="doubleRegionSearch" type="search" placeholder="Type to search/add..." autocomplete="off" />
           </label>
           <div id="doubleRegionList" class="region-list"></div>
           <div class="sidebar-actions">
-            <button id="doubleResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
-          </div>
-        </div>
-        <div class="sidebar-block">
-          <div class="sidebar-label">View Mode</div>
-          <div class="view-switcher view-switcher--vertical">
-             <button class="view-switcher__btn is-active" type="button" data-double-view="diverging">
-               <strong>Diverging Bars</strong><br><span style="font-size:11px; font-weight:400;">Relative Difference</span>
-             </button>
-             <button class="view-switcher__btn" type="button" data-double-view="scatter">
-               <strong>Correlation Scatter</strong><br><span style="font-size:11px; font-weight:400;">Paired Strength</span>
-             </button>
+            <div class="sidebar-actions__buttons">
+              <button id="doubleResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
+              <button id="doubleClearBtn" class="btn btn--mini btn--ghost" type="button">Clear</button>
+            </div>
           </div>
         </div>
       </aside>
@@ -58,11 +47,24 @@
         <div class="abstract-plain">
           <div class="abstract-plain__head">
             <div class="abstract-plain__meta">
-              <p class="kicker"><span class="dot" style="--c:var(--accent2)"></span> Circuit Anatomy</p>
+              <p class="kicker"><span class="dot" style="--c:var(--accent2)"></span> Circuit Anatomy: Dual-Viral Tracing</p>
             </div>
             <button id="doubleAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right">View Experimental Rationale</button>
           </div>
           <div id="doubleAbstractBody" class="abstract-plain__body" hidden></div>
+        </div>
+        <div class="zoom-controls-row">
+          <div class="zoom-controls-group">
+            <div class="view-switcher" role="group" aria-label="Select dual injection view">
+              <button class="view-switcher__btn is-active" type="button" data-double-view="diverging">Diverging Bars</button>
+              <button class="view-switcher__btn" type="button" data-double-view="scatter">Correlation Scatter</button>
+            </div>
+            <div class="zoom-controls">
+              <span id="doubleZoomLevel" class="zoom-controls__level">1.0x</span>
+              <span class="zoom-controls__divider">|</span>
+              <button id="doubleResetZoomBtn" class="zoom-controls__btn" type="button">Reset</button>
+            </div>
+          </div>
         </div>
         
         <div class="figure-head figure-head--center" id="doubleFigureHead"></div>
@@ -75,7 +77,7 @@
           </div>
         </div>
 
-        <details class="figure-insight" open style="margin-top: auto;">
+        <details class="figure-insight" open style="margin-top:16px;">
           <summary>
             <div class="figure-insight__header"><p class="kicker">How to Interpret This Data</p></div>
             <span class="figure-insight__toggle">View Interpretation</span>

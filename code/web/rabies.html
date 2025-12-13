@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
   <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body>
   <nav class="nav">
@@ -18,8 +17,8 @@
       <a href="/code/web/index.html" class="brand">Olfactory DV</a>
       <div class="nav__links">
         <a href="/code/web/index.html">Home</a>
-        <a href="/code/web/rabies.html" class="is-active">Rabies Tracing</a>
         <a href="/code/web/double_injection.html">Dual Injection</a>
+        <a href="/code/web/rabies.html" class="is-active">Rabies Tracing</a>
         <a href="/code/web/scrna.html">scRNA-seq</a>
         <a href="/code/web/upload.html">Upload</a>
         <a href="/code/web/napari.html">Napari Viewer</a>
@@ -29,13 +28,7 @@
 
   <section id="datasets" class="section section--alt" style="padding-top:96px;">
     <div class="container">
-      <div class="section__head" data-aos="fade-up">
-        <div>
-          <p class="kicker">Rabies Tracing</p>
-          <h3>Monosynaptic Input Mapping</h3>
-          <p class="muted">Explore ipsilateral vs contralateral inputs to AON starters.</p>
-        </div>
-      </div>
+      
 
       <div class="rabies-layout card" data-aos="fade-up" data-aos-delay="80">
         <aside class="rabies-sidebar">
@@ -51,30 +44,38 @@
               </div>
             </div>
           </div>
-          <div class="sidebar-block">
+          <div class="sidebar-block" data-rabies-group-block>
             <div class="sidebar-label">View mode</div>
-            <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="genotype" checked /> Region Signal Averaged </label>
-            <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="subject" /> Region Signal Per Mouse </label>
+            <div class="view-switcher view-switcher--vertical" role="group" aria-label="Select rabies view mode">
+              <button class="view-switcher__btn is-active" type="button" data-rabies-group="genotype" aria-pressed="true">Region Signal Averaged</button>
+              <button class="view-switcher__btn" type="button" data-rabies-group="subject" aria-pressed="false">Region Signal Per Mouse</button>
+            </div>
           </div>
         </aside>
         <div class="rabies-main">
           <div class="abstract-plain">
             <div class="abstract-plain__head">
               <div class="abstract-plain__meta">
-                <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span></span>  Input Mapping: Monosynaptic Rabies Tracing</p>
+                <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span> Input Mapping: Monosynaptic Rabies Tracing</p>
               </div>
               <button id="rabiesAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">View Experimental Rationale</button>
             </div>
             <div id="rabiesAbstractBody" class="abstract-plain__body" hidden>
               <div class="muted small">
                 <p>
-                  To decode the connectivity logic of the Anterior Olfactory Nucleus (AON), we employed Monosynaptic Rabies Tracing. While anterograde tracing confirmed that 
+                  <strong>Rationale:</strong> To decode the connectivity logic of the Anterior Olfactory Nucleus (AON), we employed Monosynaptic Rabies Tracing. While anterograde tracing confirmed that 
                   interhemispheric projections arise exclusively from excitatory (VGLUT1+) neurons, their postsynaptic impact depends on their targets. By using vGLUT1-Cre and 
                   vGAT-Cre mice as starter populations, this experiment quantifies the synaptic convergence of brain-wide inputs onto specific AON cell types. This reveals whether 
                   long-range inputs (such as those from the contralateral hemisphere, olfactory bulb, or hippocampus) differentially target excitation or inhibition to drive complex 
                   processing like feedforward inhibition or temporal gating.
-              <div class="muted small">
-                Virus: EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=<span id="rabiesMouseCount">–</span> mice
+                </p>
+                <p>
+                  <strong>Context: </strong> VGLUT1 (Excitatory): These neurons release glutamate to tell downstream cells to fire (send a signal). They drive information forward.
+                    VGAT (Inhibitory): These neurons release GABA to tell downstream cells to stop firing. They silence noise and sculpt the signal.
+                  </p>
+                <p class="muted small">
+                  <strong>Virus: </strong>EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=<span id="rabiesMouseCount">–</span> mice
+                </p>
               </div>
             </div>
           </div>
@@ -120,8 +121,18 @@
   <script src="datasets.js"></script>
   <script src="rabies.js"></script>
   <script>
-    AOS.init({duration: 600, once: true});
     document.addEventListener('DOMContentLoaded', () => {
+      if(typeof AOS !== 'undefined'){ AOS.init({duration: 600, once: true}); }
+      const rabiesAbstractToggle = document.getElementById('rabiesAbstractToggle');
+      const rabiesAbstractBody = document.getElementById('rabiesAbstractBody');
+      rabiesAbstractToggle?.addEventListener('click', () => {
+        const isExpanded = rabiesAbstractToggle.getAttribute('aria-expanded') === 'true';
+        rabiesAbstractToggle.setAttribute('aria-expanded', String(!isExpanded));
+        if(rabiesAbstractBody){
+          rabiesAbstractBody.hidden = isExpanded;
+        }
+        rabiesAbstractToggle.textContent = isExpanded ? 'View Experimental Rationale' : 'Hide Experimental Rationale';
+      });
       if(typeof initRabiesDashboard === 'function') initRabiesDashboard();
     });
   </script>

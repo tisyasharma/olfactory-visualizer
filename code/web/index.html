@@ -16,8 +16,8 @@
       <a href="/code/web/index.html" class="brand is-active">Olfactory DV</a>
       <div class="nav__links">
         <a href="/code/web/index.html" class="is-active">Home</a>
-        <a href="/code/web/rabies.html">Rabies Tracing</a>
         <a href="/code/web/double_injection.html">Dual Injection</a>
+        <a href="/code/web/rabies.html">Rabies Tracing</a>
         <a href="/code/web/scrna.html">scRNA-seq</a>
         <a href="/code/web/upload.html">Upload</a>
         <a href="/code/web/napari.html">Napari Viewer</a>
@@ -32,8 +32,8 @@
         <h1>Olfactory Data Visualizer</h1>
         <p class="lede">Dashboard for AON Interhemispheric Connections</p>
         <div class="legend legend--stacked">
-          <div class="legend__item"><span class="dot" style="--c:var(--accent1)"></span><span>Input Mapping: Monosynaptic Rabies Tracing</span></div>
           <div class="legend__item"><span class="dot" style="--c:var(--accent2)"></span><span>Circuit Anatomy: Dual-Viral Tracing</span></div>
+          <div class="legend__item"><span class="dot" style="--c:var(--accent1)"></span><span>Input Mapping: Monosynaptic Rabies Tracing</span></div>
           <div class="legend__item"><span class="dot" style="--c:var(--accent3)"></span><span>Molecular Profiling: Single-Cell RNA Sequencing</span></div>
         </div>
       </div>
@@ -46,8 +46,14 @@
         <div class="intro-grid">
           <div class="intro-block">
             <h3 class="kicker" style="font-size: 14px; margin-bottom:12px;">Experimental Rationale</h3>
+            <p style="font-size: 16px; line-height: 1.6; color: #374151; margin-bottom: 16px;">
+              <strong>Significance:</strong> The Anterior Olfactory Nucleus (AON) occupies a unique position as the brain's first site of bilateral olfactory integration. Unlike vision or audition, olfactory pathways remain unilateral until the cortex, making the AON the critical bottleneck for the interhemispheric communication required for odor localization and memory. Clinically, it is also among the earliest regions to degenerate in Alzheimer’s and Parkinson’s Disease.
+            </p>
+            <p style="font-size: 16px; line-height: 1.6; color: #374151; margin-bottom: 16px;">
+              To characterize this vital circuit, this dashboard integrates a multi-modal interrogation of the AON. By combining <strong>Dual-Viral Mapping</strong> (Anatomy), <strong>Monosynaptic Rabies Tracing</strong> (Connectivity), and <strong>snRNA-sequencing</strong> (Identity), we define the structural organization and molecular profile of these interhemispheric connections.
+            </p>
             <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-              This dashboard integrates a multi-modal interrogation of the Anterior Olfactory Nucleus (AON). By combining Dual-Viral Mapping (Anatomy), Monosynaptic Rabies Tracing (Connectivity), and snRNA-sequencing (Identity), we characterize the circuit's structural organization and molecular profile.
+            <strong style="color: #111827;">Key Insight:</strong> Our data reveals that interhemispheric neurons are a molecularly distinct, excitatory population that specifically targets olfactory centers while avoiding non-olfactory outputs. This specialized circuitry provides the structural basis for how the brain integrates bilateral information to drive behavior.
             </p>
           </div>
           <div style="height: 1px; background: #e5e7eb; margin: 32px 0;"></div>
@@ -56,21 +62,21 @@
             <ul class="expected-list" style="font-size: 15px; color: #374151; gap: 12px; display: flex; flex-direction: column;">
               <li><span style="color:#111827;">Anatomy:</span> Interhemispheric axons originate primarily from the Dorsolateral AON and are exclusively VGLUT1+ (excitatory).</li>
               <li><span style="color:#111827;">Connectivity:</span> Long-range inputs synapse onto both Excitatory and Inhibitory populations.</li>
-              <li><span style="color:#111827;">Identity:</span> Transcriptomic profiling identifies 27 distinct clusters.</li>
+              <li><span style="color:#111827;">Identity:</span> Transcriptomic profiling identifies __ distinct clusters.</li>
             </ul>
           </div>
         </div>
-
+        
         <div class="intro-actions" style="margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
-          <a href="rabies.html" class="btn-card">
-            <span class="dot" style="--c:var(--accent1)"></span>
-            <strong>Explore Rabies Tracing</strong>
-            <span class="muted small">Input Mapping</span>
-          </a>
           <a href="double_injection.html" class="btn-card">
             <span class="dot" style="--c:var(--accent2)"></span>
             <strong>Explore Dual Injection</strong>
             <span class="muted small">Circuit Anatomy</span>
+          </a>
+          <a href="rabies.html" class="btn-card">
+            <span class="dot" style="--c:var(--accent1)"></span>
+            <strong>Explore Rabies Tracing</strong>
+            <span class="muted small">Input Mapping</span>
           </a>
           <a href="scrna.html" class="btn-card">
             <span class="dot" style="--c:var(--accent3)"></span>

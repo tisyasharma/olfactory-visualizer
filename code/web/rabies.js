@@ -102,12 +102,12 @@ if(tooltip){
     document.body.appendChild(tooltip);
   }
 }
-const groupRadios = document.querySelectorAll('input[name="rabiesGroupBy"]');
 const rabiesResetBtn = document.getElementById('rabiesResetBtn');
 const rabiesClearBtn = document.getElementById('rabiesClearBtn');
 const rabiesMouseCountEl = document.getElementById('rabiesMouseCount');
 const zoomLevelEl = document.getElementById('zoomLevel');
 const resetZoomBtn = document.getElementById('resetZoomBtn');
+let rabiesGroupDelegateBound = false;
 const rabiesViewButtons = document.querySelectorAll('[data-rabies-view]');
 const rabiesFigureHead = document.getElementById('rabiesFigureHead');
 const rabiesInterpretationEl = document.getElementById('rabiesInterpretation');
@@ -153,8 +153,8 @@ const rabiesInterpretationCopy = {
           <span>THE METRIC</span>
         </div>
         <ul class="insight-text" style="margin:0; padding-left:18px;">
-          <li style="margin-bottom:4px;"><strong>Log10 Scale:</strong> X-axis uses log10 values normalized to <strong>Injection Size</strong> (total ipsilateral signal) to account for uptake differences.</li>
-          <li><strong>Magnitude:</strong> One tick on the scale equals a <strong>10-fold</strong> change in connection strength.</li>
+          <li style="margin-bottom:4px;"><strong>Normalization:</strong> X-axis uses log10 values normalized to <strong>Injection Size</strong> (total ipsilateral signal) to account for uptake differences.</li>
+          <li><strong>Log Scale:</strong> One tick on the scale equals a <strong>10-fold</strong> change in connection strength.</li>
         </ul>
       </div>
       <div class="figure-insight__divider" aria-hidden="true"></div>
@@ -173,11 +173,11 @@ const rabiesInterpretationCopy = {
               <circle cx="12" cy="12" r="2.6"></circle>
             </svg>
           </span>
-          <span>THE SIGNAL: VGLUT1 vs. VGAT</span>
+          <span>THE SIGNAL</span>
         </div>
         <ul class="insight-text" style="margin:0; padding-left:18px;">
-          <li><strong>VGLUT1 (Excitatory):</strong> Driver inputs to the circuit.</li>
-          <li><strong>VGAT (Inhibitory):</strong> Gating/control inputs within the circuit.</li>
+          <li><strong>VGLUT1 (Excitatory):</strong> Driver inputs that tell the circuit to fire.</li>
+          <li><strong>VGAT (Inhibitory):</strong> Gating/control inputs that tell the circuit to stop, often used to filter out noise.</li>
         </ul>
       </div>
     </div>
@@ -210,8 +210,8 @@ const rabiesInterpretationCopy = {
           <span>THE METRIC</span>
         </div>
         <ul class="insight-text" style="margin:0; padding-left:18px;">
-          <li style="margin-bottom:4px;"><strong>Normalized to AON:</strong> The data is normalized to the AON’s own Excitatory (VGLUT1) input. The AON bar for VGLUT1 is set to 100 as the baseline reference. All other bars show % of that signal.</li>
-          <li><strong>Why Log Scale?:</strong> The connection strengths span over 5 orders of magnitude. The logarithmic scale allows you to compare massive inputs (like the AON’s recurrent loop) with subtle, long-range modulators on the same chart. </li>
+          <li style="margin-bottom:4px;"><strong>Normalization:</strong> The data is displayed as a percentage of the total viral uptake at the injection site. The AON, being the injection site, naturally shows the highest signal intensity.</li>
+          <li><strong>Log Scale:</strong> The connection strengths span over 5 orders of magnitude. The logarithmic scale allows you to compare massive inputs (like the AON’s recurrent loop) with subtle, long-range modulators on the same chart. </li>
         </ul>
       </div>
       <div class="figure-insight__divider" aria-hidden="true"></div>
@@ -230,7 +230,7 @@ const rabiesInterpretationCopy = {
               <circle cx="12" cy="12" r="2.6"></circle>
             </svg>
           </span>
-          <span>THE SIGNAL: Excitation vs. Inhibition</span>
+          <span>THE SIGNAL</span>
         </div>
         <ul class="insight-text" style="margin:0; padding-left:18px;">
           <li><strong>VGAT vs. VGLUT1:</strong> Compare paired bars per region to see inhibitory vs. excitatory dominance.</li>
@@ -323,11 +323,49 @@ regionSearch?.addEventListener('change', (e) => {
   }
 });
 
-groupRadios.forEach(r => r.addEventListener('change', () => {
-  if(!r.checked) return;
-  rabiesState.groupBy = r.value === 'subject' ? 'subject' : 'genotype';
+function updateRabiesGroupButtons(){
+  document.querySelectorAll('[data-rabies-group]').forEach(btn => {
+    const val = btn.getAttribute('data-rabies-group');
+    const isActive = (val === rabiesState.groupBy) || (!val && rabiesState.groupBy === 'genotype');
+    btn.classList.toggle('is-active', isActive);
+    btn.setAttribute('aria-pressed', String(isActive));
+  });
+}
+
+function handleRabiesGroupClick(btn){
+  const val = btn.getAttribute('data-rabies-group') === 'subject' ? 'subject' : 'genotype';
+  if(rabiesState.groupBy === val) return;
+  // Debug aid if needed during QA
+  console.debug('Rabies view mode ->', val);
+  rabiesState.groupBy = val;
+  updateRabiesGroupButtons();
+  if(rabiesState.data?.length){
+    renderRabiesPlots();
+  }
   loadRabiesData();
-}));
+}
+
+function bindRabiesGroupButtons(){
+  document.querySelectorAll('[data-rabies-group]').forEach(btn => {
+    if(btn.dataset.rabiesGroupBound === 'true') return;
+    btn.dataset.rabiesGroupBound = 'true';
+    btn.addEventListener('click', (evt) => {
+      evt.stopPropagation();
+      handleRabiesGroupClick(btn);
+    });
+  });
+  if(!rabiesGroupDelegateBound){
+    document.addEventListener('click', (evt) => {
+      const btn = evt.target?.closest?.('[data-rabies-group]');
+      if(!btn) return;
+      handleRabiesGroupClick(btn);
+    });
+    rabiesGroupDelegateBound = true;
+  }
+}
+
+bindRabiesGroupButtons();
+updateRabiesGroupButtons();
 
 rabiesResetBtn?.addEventListener('click', () => {
   rabiesState.forceEmptyPlot = false;
@@ -360,6 +398,7 @@ rabiesViewButtons.forEach(btn => {
     rabiesZoomTransform = d3.zoomIdentity;
     updateRabiesViewButtons();
     renderRabiesPlots();
+    toggleGroupSelector();
   });
 });
 
@@ -374,6 +413,13 @@ function updateRabiesViewButtons(){
     btn.classList.toggle('is-active', view === rabiesState.view);
     btn.setAttribute('aria-pressed', view === rabiesState.view ? 'true' : 'false');
   });
+}
+
+function toggleGroupSelector(){
+  const block = document.querySelector('[data-rabies-group-block]');
+  if(!block) return;
+  const show = rabiesState.view === 'dot';
+  block.style.display = show ? '' : 'none';
 }
 
 function setRabiesMouseCount(n){
@@ -534,6 +580,7 @@ function applyDefaultRabiesSelection(){
 }
 
 function renderRabiesPlots(){
+  updateRabiesGroupButtons();
   renderInterpretation();
   if(rabiesFigureHead){
     const titles = {
@@ -633,7 +680,7 @@ function drawRabiesDivergingPlot(){
   const genotypes = ['Vglut1','Vgat'];
   const color = d3.scaleOrdinal().domain(genotypes).range([accent2, accent1]);
 
-  const xMin = 0.01;
+  const xMin = 0.001;
   const xMax = 10000;
   const x = d3.scaleLog().domain([xMin, xMax]).range([margin.left, width - margin.right]).clamp(true);
   const y = d3.scaleBand().domain(sortedRegions).range([margin.top, height - margin.bottom]).paddingInner(0.25);
@@ -641,11 +688,22 @@ function drawRabiesDivergingPlot(){
   const ySub = d3.scaleBand().domain(['Vgat','Vglut1']).range([0, y.bandwidth()]).paddingInner(0.2);
 
   // axes
-  const xAxis = d3.axisBottom(x).ticks(6, "~g");
+  const logTicks = [1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4];
+  const supers = { '-':'\u207b', '0':'\u2070', '1':'\u00b9', '2':'\u00b2', '3':'\u00b3', '4':'\u2074', '5':'\u2075', '6':'\u2076', '7':'\u2077', '8':'\u2078', '9':'\u2079' };
+  const toSuperscript = numStr => numStr.split('').map(c => supers[c] || c).join('');
+  const formatPow = d => {
+    const p = Math.log10(d);
+    if(!Number.isFinite(p)) return d;
+    return `10${toSuperscript(String(p))}`;
+  };
+  const xAxis = d3.axisBottom(x).tickValues(logTicks).tickFormat(formatPow);
   const xAxisG = svg.append('g')
     .attr('transform', `translate(0,${height - margin.bottom})`)
     .call(xAxis)
-    .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
+    .call(g => g.selectAll('text')
+      .attr('font-size', 12)
+      .attr('fill', '#1f2937')
+      .style('font-family', 'inherit'))
     .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'));
   svg.append('g')
     .attr('transform', `translate(${margin.left},0)`)
@@ -661,7 +719,7 @@ function drawRabiesDivergingPlot(){
   // gridlines
   svg.append('g')
     .selectAll('line')
-    .data(x.ticks(6))
+    .data(logTicks)
     .enter()
     .append('line')
     .attr('x1', d => x(d))
@@ -695,6 +753,57 @@ function drawRabiesDivergingPlot(){
     .attr('fill','#1f2937')
     .attr('font-size', 12.5)
     .text('Mean normalized value (% of AON) [log scale]');
+
+  // Legend (top-right, square swatches)
+  const legendItems = [
+    { label: 'Vglut1', colorKey:'Vglut1' },
+    { label: 'Vgat', colorKey:'Vgat' }
+  ];
+  const legendG = svg.append('g').attr('class','rabies-bar-legend');
+  const legendFontSize = 12;
+  const legendPadding = { x: 10, y: 8 };
+  const swatchSize = 12;
+  const itemGap = 14;
+  // Calculate width
+  const legendWidth = legendItems.reduce((acc, item) => {
+    const textWidth = item.label.length * (legendFontSize * 0.6);
+    return acc + swatchSize + 8 + textWidth + itemGap;
+  }, -itemGap) + legendPadding.x * 2;
+  const legendHeight = swatchSize + legendPadding.y * 2;
+  const legendX = width - margin.right - legendWidth;
+  const legendY = margin.top - legendHeight - 4;
+  const legendWrapper = legendG.append('g')
+    .attr('transform', `translate(${legendX}, ${legendY})`);
+  legendWrapper.append('rect')
+    .attr('width', legendWidth)
+    .attr('height', legendHeight)
+    .attr('rx', 8)
+    .attr('ry', 8)
+    .attr('fill', '#fff')
+    .attr('stroke', '#e5e7eb')
+    .attr('stroke-width', 1);
+  let lx = legendPadding.x;
+  legendItems.forEach(item => {
+    const g = legendWrapper.append('g').attr('transform', `translate(${lx}, ${legendPadding.y})`);
+    g.append('rect')
+      .attr('width', swatchSize)
+      .attr('height', swatchSize)
+      .attr('fill', color(item.colorKey))
+      .attr('fill-opacity', 0.6)
+      .attr('stroke', color(item.colorKey))
+      .attr('stroke-width', 1.4)
+      .attr('rx', 3)
+      .attr('ry', 3);
+    g.append('text')
+      .attr('x', swatchSize + 8)
+      .attr('y', swatchSize - 2)
+      .attr('fill', '#1f2937')
+      .attr('font-size', legendFontSize)
+      .attr('font-weight', 600)
+      .text(item.label);
+    const textWidth = item.label.length * (legendFontSize * 0.6);
+    lx += swatchSize + 8 + textWidth + itemGap;
+  });
 
   rabiesPlotRefs = [{
     type: 'bar',
@@ -1250,7 +1359,7 @@ function showTooltip(event, d){
   if(!tooltip) return;
   tooltip.hidden = false;
   const semTxt = d.semPerc ? d.semPerc.toFixed(2) + '%' : 'NA';
-  const groupTxt = rabiesState.groupBy === 'genotype' ? `${d.group} (mean ± sem)` : d.group;
+  const groupTxt = rabiesState.groupBy === 'genotype' ? `${d.group} (mean ± SEM)` : d.group;
   const rawPerc = typeof d.rawValuePerc === 'number' ? d.rawValuePerc : (d.valuePerc || 0);
   const isZero = rawPerc === 0;
   tooltip.innerHTML = `
@@ -1333,7 +1442,15 @@ function showBarTooltip(event, d){
 
 function initRabiesDashboard(){
   rabiesZoomTransform = d3.zoomIdentity;
+  bindRabiesGroupButtons();
+  updateRabiesGroupButtons();
   updateRabiesViewButtons();
+  toggleGroupSelector();
+  // Ensure the UI and state match any pre-selected mode on load
+  const activeModeBtn = document.querySelector('[data-rabies-group].is-active');
+  if(activeModeBtn){
+    handleRabiesGroupClick(activeModeBtn);
+  }
   loadRabiesData();
 }
 

@@ -41,6 +41,8 @@ class RegionLoadByMouse(BaseModel):
     subject_id: str
     region: str
     hemisphere: str
+    experiment_type: Optional[str] = None
     load: Optional[float] = None
     load_fraction: Optional[float] = None
     genotype: Optional[str] = None
+    details: Optional[str] = None
