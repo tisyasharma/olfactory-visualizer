@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Dual Injection · Olfactory DV</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body style="background-color: #f7f9fb;">
+  <nav class="nav">
+    <div class="nav__inner">
+      <a href="/code/web/index.html" class="brand">Olfactory DV</a>
+      <div class="nav__links">
+        <a href="/code/web/index.html">Home</a>
+        <a href="/code/web/rabies.html">Rabies Tracing</a>
+        <a href="/code/web/double_injection.html" class="is-active">Dual Injection</a>
+        <a href="/code/web/scrna.html">scRNA-seq</a>
+        <a href="/code/web/upload.html">Upload</a>
+        <a href="/code/web/napari.html">Napari Viewer</a>
+      </div>
+    </div>
+  </nav>
+
+  <header style="padding-top: 80px; padding-bottom: 20px; text-align: center;">
+    <p class="kicker" style="color: var(--accent2);">TISYA SHARMA · CAPSTONE</p>
+    <h1 style="margin-bottom: 10px;">Dual Injection — Circuit Anatomy</h1>
+    <p class="muted">Dedicated view for the dual-viral tracing experiment.</p>
+  </header>
+
+  <div class="container" style="max-width: 1400px; padding-bottom: 60px;" data-aos="fade-up">
+    <div class="rabies-layout card" style="height: 800px;" data-aos="fade-up" data-aos-delay="80">
+      <aside class="rabies-sidebar">
+        <div class="sidebar-block region-dropdown">
+          <label class="sidebar-label">Search & Select Regions
+            <input id="doubleRegionSearch" type="search" placeholder="Type to search..." autocomplete="off" />
+          </label>
+          <div id="doubleRegionList" class="region-list"></div>
+          <div class="sidebar-actions">
+            <button id="doubleResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
+          </div>
+        </div>
+        <div class="sidebar-block">
+          <div class="sidebar-label">View Mode</div>
+          <div class="view-switcher view-switcher--vertical">
+             <button class="view-switcher__btn is-active" type="button" data-double-view="diverging">
+               <strong>Diverging Bars</strong><br><span style="font-size:11px; font-weight:400;">Relative Difference</span>
+             </button>
+             <button class="view-switcher__btn" type="button" data-double-view="scatter">
+               <strong>Correlation Scatter</strong><br><span style="font-size:11px; font-weight:400;">Paired Strength</span>
+             </button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="rabies-main">
+        <div class="abstract-plain">
+          <div class="abstract-plain__head">
+            <div class="abstract-plain__meta">
+              <p class="kicker"><span class="dot" style="--c:var(--accent2)"></span> Circuit Anatomy</p>
+            </div>
+            <button id="doubleAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right">View Experimental Rationale</button>
+          </div>
+          <div id="doubleAbstractBody" class="abstract-plain__body" hidden></div>
+        </div>
+        
+        <div class="figure-head figure-head--center" id="doubleFigureHead"></div>
+        
+        <div class="figure-panel" style="flex: 1; min-height: 0;">
+          <div class="panel-a" style="border:none; width:100%; height: 100%; overflow: hidden;">
+            <div id="doubleDivergingPlot" class="dotplot-container" style="height: 100%;"></div>
+            <div id="doubleScatterPlot" class="dotplot-container" style="display:none; height: 100%;"></div>
+            <div id="di-debug-log" style="display:none;"></div>
+          </div>
+        </div>
+
+        <details class="figure-insight" open style="margin-top: auto;">
+          <summary>
+            <div class="figure-insight__header"><p class="kicker">How to Interpret This Data</p></div>
+            <span class="figure-insight__toggle">View Interpretation</span>
+          </summary>
+          <div id="doubleInterpretation" class="figure-insight__body"></div>
+        </details>
+        <div id="doubleTooltip" class="tooltip" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+  <script src="utils.js"></script>
+  <script src="dual_injection.js"></script>
+  <script>
+    AOS.init({ duration: 600, once: true });
+    document.addEventListener('DOMContentLoaded', () => {
+      if(typeof initDoubleDashboard === 'function') initDoubleDashboard();
+    });
+  </script>
+</body>
+</html>

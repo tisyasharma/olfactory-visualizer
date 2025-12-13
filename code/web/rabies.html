@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rabies Tracing · Olfactory DV</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <link href="https://unpkg.com/aos@2.3.4/dist/aos.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav__inner">
+      <a href="/code/web/index.html" class="brand">Olfactory DV</a>
+      <div class="nav__links">
+        <a href="/code/web/index.html">Home</a>
+        <a href="/code/web/rabies.html" class="is-active">Rabies Tracing</a>
+        <a href="/code/web/double_injection.html">Dual Injection</a>
+        <a href="/code/web/scrna.html">scRNA-seq</a>
+        <a href="/code/web/upload.html">Upload</a>
+        <a href="/code/web/napari.html">Napari Viewer</a>
+      </div>
+    </div>
+  </nav>
+
+  <section id="datasets" class="section section--alt" style="padding-top:96px;">
+    <div class="container">
+      <div class="section__head" data-aos="fade-up">
+        <div>
+          <p class="kicker">Rabies Tracing</p>
+          <h3>Monosynaptic Input Mapping</h3>
+          <p class="muted">Explore ipsilateral vs contralateral inputs to AON starters.</p>
+        </div>
+      </div>
+
+      <div class="rabies-layout card" data-aos="fade-up" data-aos-delay="80">
+        <aside class="rabies-sidebar">
+          <div class="sidebar-block region-dropdown">
+            <label class="sidebar-label">Search & Select Regions
+              <input id="rabiesRegionSearch" type="search" placeholder="Type to search/add..." autocomplete="off" />
+            </label>
+            <div id="rabiesRegionList" class="region-list"></div>
+            <div class="sidebar-actions">
+              <div class="sidebar-actions__buttons">
+                <button id="rabiesResetBtn" class="btn btn--mini btn--ghost" type="button">Reset defaults</button>
+                <button id="rabiesClearBtn" class="btn btn--mini btn--ghost" type="button">Clear</button>
+              </div>
+            </div>
+          </div>
+          <div class="sidebar-block">
+            <div class="sidebar-label">View mode</div>
+            <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="genotype" checked /> Region Signal Averaged </label>
+            <label class="sidebar-radio"><input type="radio" name="rabiesGroupBy" value="subject" /> Region Signal Per Mouse </label>
+          </div>
+        </aside>
+        <div class="rabies-main">
+          <div class="abstract-plain">
+            <div class="abstract-plain__head">
+              <div class="abstract-plain__meta">
+                <p class="kicker"><span class="dot" style="--c:var(--accent1)"></span></span>  Input Mapping: Monosynaptic Rabies Tracing</p>
+              </div>
+              <button id="rabiesAbstractToggle" class="figure-insight__toggle figure-insight__toggle--right" type="button" aria-expanded="false" aria-controls="rabiesAbstractBody">View Experimental Rationale</button>
+            </div>
+            <div id="rabiesAbstractBody" class="abstract-plain__body" hidden>
+              <div class="muted small">
+                <p>
+                  To decode the connectivity logic of the Anterior Olfactory Nucleus (AON), we employed Monosynaptic Rabies Tracing. While anterograde tracing confirmed that 
+                  interhemispheric projections arise exclusively from excitatory (VGLUT1+) neurons, their postsynaptic impact depends on their targets. By using vGLUT1-Cre and 
+                  vGAT-Cre mice as starter populations, this experiment quantifies the synaptic convergence of brain-wide inputs onto specific AON cell types. This reveals whether 
+                  long-range inputs (such as those from the contralateral hemisphere, olfactory bulb, or hippocampus) differentially target excitation or inhibition to drive complex 
+                  processing like feedforward inhibition or temporal gating.
+              <div class="muted small">
+                Virus: EnvA-dG-Rabies | Starters: vGLUT1-Cre, vGAT-Cre | N=<span id="rabiesMouseCount">–</span> mice
+              </div>
+            </div>
+          </div>
+          <div class="zoom-controls-row">
+            <div class="zoom-controls-group">
+              <div class="view-switcher" role="group" aria-label="Select visualization type">
+                <button class="view-switcher__btn is-active" type="button" data-rabies-view="dot">Dot Plot</button>
+                <button class="view-switcher__btn" type="button" data-rabies-view="bar">Connectivity Bars</button>
+              </div>
+              <div class="zoom-controls">
+                <span id="zoomLevel" class="zoom-controls__level">1.0x</span>
+                <span class="zoom-controls__divider">|</span>
+                <button id="resetZoomBtn" class="zoom-controls__btn" type="button">Reset</button>
+              </div>
+            </div>
+          </div>
+          <div class="figure-head figure-head--center" id="rabiesFigureHead"></div>
+          <div class="figure-panel">
+            <div class="panel-a">
+              <div id="rabiesDotPlotIpsi" class="dotplot-container"></div>
+            </div>
+            <div class="panel-b">
+              <div id="rabiesDotPlotContra" class="dotplot-container"></div>
+            </div>
+          </div>
+          <details class="figure-insight" open>
+            <summary>
+              <div class="figure-insight__header">
+                <p class="kicker">How to Interpret This Data</p>
+              </div>
+              <span class="figure-insight__toggle" aria-hidden="true">View Interpretation</span>
+            </summary>
+            <div id="rabiesInterpretation" class="figure-insight__body"></div>
+          </details>
+          <div id="rabiesTooltip" class="tooltip" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
+  <script src="utils.js"></script>
+  <script src="datasets.js"></script>
+  <script src="rabies.js"></script>
+  <script>
+    AOS.init({duration: 600, once: true});
+    document.addEventListener('DOMContentLoaded', () => {
+      if(typeof initRabiesDashboard === 'function') initRabiesDashboard();
+    });
+  </script>
+</body>
+</html>

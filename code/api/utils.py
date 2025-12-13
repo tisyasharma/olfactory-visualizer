@@ -72,6 +72,9 @@ def derive_genotype(details: str = None, experiment_type: str = None):
     Quick string-based genotype tag so the client doesn't have to guess.
     """
     label = " ".join([details or "", experiment_type or ""]).lower()
+    # Treat dual-viral/double injection experiments as excitatory (Vglut1) for grouping.
+    if experiment_type and experiment_type.lower() == "double_injection":
+        return "Vglut1"
     if "vgat" in label:
         return "Vgat"
     if "vglut" in label:

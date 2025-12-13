@@ -27,7 +27,7 @@ body{
 }
 .nav__inner{ max-width:1120px; margin:0 auto; height:100%; display:flex; align-items:center; justify-content:space-between; padding:0 16px; }
 .brand{ font-weight:600; color:var(--ink); text-decoration:none }
-.nav__links a{ margin-left:16px; color:#4b5563; text-decoration:none; font-size:14px }
+.nav__links a{ margin-left:16px; color:#4b5563; text-decoration:none; font-size:14px; font-weight:500; }
 .nav__links a.is-active{ color:var(--accent2); font-weight:600; }
 .nav__links a:hover{ color:var(--accent2) }
 
@@ -135,6 +135,57 @@ h2,h3,h4{ margin:6px 0 }
 .tab.is-active{ border-color:var(--accent2); outline:2px solid rgba(155,89,255,.15) }
 .tabpanel{ padding-top:8px }
 .tabpanel[hidden]{ display:none !important }
+.tabpanel.is-active{
+  display:block !important;
+  visibility:visible !important;
+  width:100%;
+}
+.tabpanel.is-active .rabies-layout{
+  width:100%;
+}
+#doubleTab .figure-panel{
+  display:block;
+  width:100%;
+  min-height:620px;
+}
+#doubleTab .dotplot-container{
+  display:block !important;
+  width:100%;
+  min-height:600px;
+  height:600px;
+}
+#doubleTab .panel-a{
+  width:100%;
+  padding:12px;
+  min-height:620px;
+}
+
+.btn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--ink);
+  background: #f8fafc;
+  transition: all 0.2s ease;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+.btn-card:hover {
+  background: #fff;
+  border-color: var(--accent2);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.btn-card strong { font-size: 14px; }
+.btn-card .small { font-size: 12px; }
+.rabies-layout{
+  width:100%;
+}
 
 /* Layout helpers */
 .controls-grid{ display:grid; grid-template-columns:1fr; gap:16px; margin-bottom:16px }

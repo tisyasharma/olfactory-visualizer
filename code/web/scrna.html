@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Napari Viewer · AON Connectome Atlas</title>
+  <title>scRNA-seq · Olfactory DV</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,40 +18,26 @@
         <a href="/code/web/index.html">Home</a>
         <a href="/code/web/rabies.html">Rabies Tracing</a>
         <a href="/code/web/double_injection.html">Dual Injection</a>
-        <a href="/code/web/scrna.html">scRNA-seq</a>
+        <a href="/code/web/scrna.html" class="is-active">scRNA-seq</a>
         <a href="/code/web/upload.html">Upload</a>
-        <a href="/code/web/napari.html" class="is-active">Napari Viewer</a>
+        <a href="/code/web/napari.html">Napari Viewer</a>
       </div>
     </div>
   </nav>
 
-  <section id="viewer" class="section section--alt" style="padding-top:96px;">
+  <section class="section" style="padding-top:96px;">
     <div class="container" data-aos="fade-up">
-      <div class="section__head">
-        <div>
-          <p class="kicker">Napari Viewer</p>
-          <h3>Microscopy files</h3>
-        </div>
-      </div>
-      <div class="card upload-card" data-aos="fade-up" data-aos-delay="80">
-        <div class="controls-grid">
-          <label>File
-            <select id="fileSelect"></select>
-          </label>
-        </div>
-        <div id="fileDetails" class="file-details" hidden></div>
-        <div class="actions actions--right">
-          <button id="copyPathBtn" class="btn btn--mini btn--ghost">Copy path</button>
-          <button id="napariBtn" class="btn btn--mini btn--ghost">Open in Napari</button>
+      <div class="card" style="padding:32px;" data-aos="fade-up" data-aos-delay="80">
+        <p class="kicker">scRNA-seq</p>
+        <h2>Single-Cell RNA-seq Dashboard</h2>
+        <p class="muted" style="margin-bottom:16px;">Coming soon. This page will surface cluster counts, markers, and heatmaps once configured.</p>
+        <div class="expected-note">
+          <p class="muted small"><strong>API Endpoint:</strong> /api/v1/scrna/…</p>
         </div>
       </div>
     </div>
-  </section>
-
+</section>
   <script src="https://unpkg.com/aos@2.3.4/dist/aos.js"></script>
-  <script src="utils.js"></script>
-  <script src="datasets.js"></script>
-  <script src="main.js"></script>
   <script>AOS.init({ duration: 600, once: true });</script>
 </body>
 </html>

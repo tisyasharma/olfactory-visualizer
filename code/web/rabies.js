@@ -448,6 +448,7 @@ async function loadRabiesData(){
       fetchRegionLoadByMouse('left'),
       fetchRegionLoadByMouse('right')
     ]);
+    console.log(`Rabies: left rows=${leftRaw?.length || 0}, right rows=${rightRaw?.length || 0}`);
     const clean = rows => rows.filter(r => allowedGenos.has((r.genotype || '').trim()));
     const leftOnly = clean(leftRaw);
     const rightOnly = clean(rightRaw);
@@ -503,6 +504,9 @@ async function loadRabiesData(){
     renderRabiesPlots();
   }catch(err){
     console.warn('Rabies data load failed', err);
+    if(rabiesFigureHead){
+      rabiesFigureHead.innerHTML = `<div class="muted small">Rabies data failed to load. Check API availability.</div>`;
+    }
   }finally{
     rabiesState.loading = false;
   }
@@ -1328,7 +1332,6 @@ function showBarTooltip(event, d){
 }
 
 function initRabiesDashboard(){
-  if(!document.getElementById('rabiesTab')) return;
   rabiesZoomTransform = d3.zoomIdentity;
   updateRabiesViewButtons();
   loadRabiesData();

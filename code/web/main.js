@@ -3,16 +3,16 @@ if (typeof AOS !== 'undefined') {
   AOS.init({ once:true, duration:600, easing:'ease-out' });
 }
 
-// Tabs logic
-const tabs = [
-  { btn: 'rabiesTabBtn', panel: 'rabiesTab' },
-  { btn: 'doubleTabBtn', panel: 'doubleTab' },
-  { btn: 'scrnaTabBtn', panel: 'scrnaTab' }
-];
+// Tabs logic (dynamic so pages can omit tabs)
+const tabs = Array.from(document.querySelectorAll('.tab')).map(btn => ({
+  btn: btn.id,
+  panel: btn.getAttribute('aria-controls')
+}));
 
 tabs.forEach(({btn, panel}) => {
   const b = document.getElementById(btn);
-  b?.addEventListener('click', () => activateTab(btn, panel));
+  if(!b || !panel) return;
+  b.addEventListener('click', () => activateTab(btn, panel));
 });
 
 // Collapsible abstract for rabies tab
@@ -41,13 +41,35 @@ function activateTab(activeBtnId, activePanelId){
     const isActive = p.id === activePanelId;
     p.classList.toggle('is-active', isActive);
     if(isActive){ p.removeAttribute('hidden'); } else { p.setAttribute('hidden', ''); }
+    if(isActive){
+      p.style.opacity = '1';
+      p.style.transform = 'none';
+    }
   });
+  // If the double tab is activated, re-render its plots after the DOM is visible
+  if(activePanelId === 'doubleTab' && typeof renderDoublePlots === 'function'){
+    setTimeout(() => renderDoublePlots(), 60);
+  }
+  // Refresh AOS so hidden panels regain visibility after activation
+  if(typeof AOS !== 'undefined'){
+    if(typeof AOS.refreshHard === 'function'){ AOS.refreshHard(); }
+    else if(typeof AOS.refresh === 'function'){ AOS.refresh(); }
+  }
 }
 
 (function init(){
-  // open first tab by default
-  activateTab('rabiesTabBtn', 'rabiesTab');
+  // open first tab by default (if present)
+  const firstTab = document.querySelector('.tab');
+  if(firstTab){
+    const panelId = firstTab.getAttribute('aria-controls');
+    if(panelId){
+      activateTab(firstTab.id, panelId);
+    }
+  }
 
+  if(typeof initDoubleDashboard === 'function'){
+    initDoubleDashboard();
+  }
   if(typeof initRabiesDashboard === 'function'){
     initRabiesDashboard();
   }
