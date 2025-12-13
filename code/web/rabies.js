@@ -2,24 +2,6 @@ const accent1 = getComputedStyle(document.documentElement).getPropertyValue('--a
 const accent2 = getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim();
 const accent3 = getComputedStyle(document.documentElement).getPropertyValue('--accent3').trim();
 
-// Data fetchers for future charts (kept for reuse)
-async function fetchFluorSummary(experimentType, hemisphere, subjectId, regionId, groupBy){
-  const qs = new URLSearchParams();
-  if(experimentType) qs.append('experiment_type', experimentType);
-  if(hemisphere) qs.append('hemisphere', hemisphere);
-  if(subjectId && subjectId !== 'all') qs.append('subject_id', subjectId);
-  if(regionId) qs.append('region_id', regionId);
-  if(groupBy) qs.append('group_by', groupBy);
-  qs.append('limit', 500);
-  return fetchJson(`${API}/fluor/summary?${qs.toString()}`);
-}
-
-async function fetchRegionLoadSummary(hemisphere){
-  const qs = new URLSearchParams();
-  if(hemisphere) qs.append('hemisphere', hemisphere);
-  return fetchJson(`${API}/region-load/summary?${qs.toString()}`);
-}
-
 async function fetchRegionLoadByMouse(hemisphere){
   const qs = new URLSearchParams();
   qs.append('experiment_type', 'rabies');
@@ -39,12 +21,30 @@ const defaultRabiesRegions = [
   'Anterior olfactory nucleus',
   'Main olfactory bulb'
 ];
+// Dedicated default ordering for the connectivity bar plot (Figure H replica)
+const defaultRabiesBarRegions = [
+  'Anterior olfactory nucleus',
+  'lateral olfactory tract, body',
+  'anterior commissure, olfactory limb',
+  'Main olfactory bulb',
+  'Olfactory areas',
+  'Piriform area',
+  'Accessory olfactory bulb, mitral layer',
+  'Endopiriform nucleus, dorsal part',
+  'Olfactory tubercle',
+  'Accessory olfactory bulb, glomerular layer',
+  'Accessory olfactory bulb, granular layer',
+  'olfactory nerve layer of main olfactory bulb',
+  'Endopiriform nucleus, ventral part',
+  'Piriform-amygdalar area'
+];
 
 const rabiesState = {
   search: '',
   groupBy: 'genotype',
   hemisphere: 'bilateral',
   selectedRegions: new Set(),
+  selectedRegionsByView: { dot: new Set(), bar: new Set() },
   view: 'dot',
   data: [],
   dataByHemi: { ipsilateral: [], contralateral: [] },
@@ -55,6 +55,8 @@ const rabiesState = {
   regionTreeCached: false,
   regionNameToAcronym: {},
   forceEmptyPlot: false,
+  hasCustomSelectionByView: { dot: false, bar: false },
+  hasCustomSelection: false,
   // Hemisphere mapping: Right = ipsilateral (injection), Left = contralateral
   hemiMap: {
     ipsilateral: 'right',
@@ -64,10 +66,35 @@ const rabiesState = {
 // Plot margins (balanced to keep both charts same width; extra left for labels)
 const rabiesPlotMargins = { top: 80, right: 60, bottom: 44, left: 90 };
 
+// Region ratings loaded from external JSON for bar tooltip enrichment
+let regionRatings = {};
+let regionRatingsLoaded = false;
+let regionRatingsPromise = null;
+async function loadRegionRatings(){
+  if(regionRatingsLoaded) return regionRatings;
+  if(!regionRatingsPromise){
+    regionRatingsPromise = fetch('region_ratings.json')
+      .then(res => res.ok ? res.json() : {})
+      .then(data => {
+        regionRatings = data || {};
+        regionRatingsLoaded = true;
+        return regionRatings;
+      })
+      .catch(() => {
+        regionRatings = {};
+        regionRatingsLoaded = true;
+        return regionRatings;
+      });
+  }
+  return regionRatingsPromise;
+}
+
 const regionSearch = document.getElementById('rabiesRegionSearch');
 const regionListEl = document.getElementById('rabiesRegionList');
 const tooltip = document.getElementById('rabiesTooltip');
 const rabiesMainContainer = document.querySelector('.rabies-main');
+const panelA = document.querySelector('.panel-a');
+const panelB = document.querySelector('.panel-b');
 if(tooltip){
   if(rabiesMainContainer && tooltip.parentNode !== rabiesMainContainer){
     rabiesMainContainer.appendChild(tooltip);
@@ -83,9 +110,199 @@ const zoomLevelEl = document.getElementById('zoomLevel');
 const resetZoomBtn = document.getElementById('resetZoomBtn');
 const rabiesViewButtons = document.querySelectorAll('[data-rabies-view]');
 const rabiesFigureHead = document.getElementById('rabiesFigureHead');
+const rabiesInterpretationEl = document.getElementById('rabiesInterpretation');
 let rabiesPlotRefs = [];
 let rabiesZoomBehavior = null;
 let rabiesZoomTransform = d3.zoomIdentity;
+
+function ensureSelectionContainers(){
+  if(!rabiesState.selectedRegionsByView){
+    rabiesState.selectedRegionsByView = { dot: new Set(), bar: new Set() };
+  }
+  if(!rabiesState.hasCustomSelectionByView){
+    rabiesState.hasCustomSelectionByView = { dot: false, bar: false };
+  }
+}
+
+function setCustomSelectionFlag(view, val){
+  ensureSelectionContainers();
+  rabiesState.hasCustomSelectionByView[view] = val;
+  if(view === rabiesState.view){
+    rabiesState.hasCustomSelection = val;
+  }
+}
+
+function setCustomSelectionAllViews(val){
+  setCustomSelectionFlag('dot', val);
+  setCustomSelectionFlag('bar', val);
+}
+
+const rabiesInterpretationCopy = {
+  dot: `
+    <div class="figure-insight__grid">
+      <div class="figure-insight__block">
+        <div class="insight-label">
+          <span class="insight-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="3"></rect>
+              <line x1="8" y1="16" x2="8" y2="12"></line>
+              <line x1="12" y1="16" x2="12" y2="10"></line>
+              <line x1="16" y1="16" x2="16" y2="8"></line>
+            </svg>
+          </span>
+          <span>THE METRIC</span>
+        </div>
+        <ul class="insight-text" style="margin:0; padding-left:18px;">
+          <li style="margin-bottom:4px;"><strong>Log10 Scale:</strong> X-axis uses log10 values normalized to <strong>Injection Size</strong> (total ipsilateral signal) to account for uptake differences.</li>
+          <li><strong>Magnitude:</strong> One tick on the scale equals a <strong>10-fold</strong> change in connection strength.</li>
+        </ul>
+      </div>
+      <div class="figure-insight__divider" aria-hidden="true"></div>
+      <div class="figure-insight__block">
+        <div class="insight-label">
+          <span class="insight-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v4"></path>
+              <path d="M6.8 6.8 9.3 9.3"></path>
+              <path d="M3 12h4"></path>
+              <path d="M6.8 17.2 9.3 14.7"></path>
+              <path d="M12 21v-4"></path>
+              <path d="M17.2 17.2 14.7 14.7"></path>
+              <path d="M21 12h-4"></path>
+              <path d="M17.2 6.8 14.7 9.3"></path>
+              <circle cx="12" cy="12" r="2.6"></circle>
+            </svg>
+          </span>
+          <span>THE SIGNAL: VGLUT1 vs. VGAT</span>
+        </div>
+        <ul class="insight-text" style="margin:0; padding-left:18px;">
+          <li><strong>VGLUT1 (Excitatory):</strong> Driver inputs to the circuit.</li>
+          <li><strong>VGAT (Inhibitory):</strong> Gating/control inputs within the circuit.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="insight-fullrow">
+      <div class="insight-label">
+        <span class="insight-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+            <path d="M8 9h8"></path>
+            <path d="M8 13h5"></path>
+          </svg>
+        </span>
+        <span>PANEL COMPARISON: Ipsilateral vs. Contralateral</span>
+      </div>
+      <p class="insight-text"><strong>Ipsilateral:</strong> Robust local inputs from the injected hemisphere (higher because starter cells live here).<br/><strong>Contralateral:</strong> Sparse long-range projections from the opposite hemisphere; these are the interhemispheric inputs of interest.</p>
+    </div>
+  `,
+  bar: `
+    <div class="figure-insight__grid">
+      <div class="figure-insight__block">
+        <div class="insight-label">
+          <span class="insight-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="3"></rect>
+              <line x1="8" y1="16" x2="8" y2="12"></line>
+              <line x1="12" y1="16" x2="12" y2="10"></line>
+              <line x1="16" y1="16" x2="16" y2="8"></line>
+            </svg>
+          </span>
+          <span>THE METRIC</span>
+        </div>
+        <ul class="insight-text" style="margin:0; padding-left:18px;">
+          <li style="margin-bottom:4px;"><strong>Normalized to AON:</strong> The data is normalized to the AON’s own Excitatory (VGLUT1) input. The AON bar for VGLUT1 is set to 100 as the baseline reference. All other bars show % of that signal.</li>
+          <li><strong>Why Log Scale?:</strong> The connection strengths span over 5 orders of magnitude. The logarithmic scale allows you to compare massive inputs (like the AON’s recurrent loop) with subtle, long-range modulators on the same chart. </li>
+        </ul>
+      </div>
+      <div class="figure-insight__divider" aria-hidden="true"></div>
+      <div class="figure-insight__block">
+        <div class="insight-label">
+          <span class="insight-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v4"></path>
+              <path d="M6.8 6.8 9.3 9.3"></path>
+              <path d="M3 12h4"></path>
+              <path d="M6.8 17.2 9.3 14.7"></path>
+              <path d="M12 21v-4"></path>
+              <path d="M17.2 17.2 14.7 14.7"></path>
+              <path d="M21 12h-4"></path>
+              <path d="M17.2 6.8 14.7 9.3"></path>
+              <circle cx="12" cy="12" r="2.6"></circle>
+            </svg>
+          </span>
+          <span>THE SIGNAL: Excitation vs. Inhibition</span>
+        </div>
+        <ul class="insight-text" style="margin:0; padding-left:18px;">
+          <li><strong>VGAT vs. VGLUT1:</strong> Compare paired bars per region to see inhibitory vs. excitatory dominance.</li>
+          <li><strong>Ranked by strength:</strong> Regions are sorted by their strongest genotype mean so high-signal inputs float to the top.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="insight-fullrow">
+      <div class="insight-label">
+        <span class="insight-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="3"></rect>
+            <path d="M8 9h8"></path>
+            <path d="M8 13h5"></path>
+          </svg>
+        </span>
+        <span>ANATOMICAL HEIRARCHY</span>
+      </div>
+      <p class="insight-text">The regions at the top (AON, LOT, Anterior Commissure) are the primary highways for interhemispheric information. 
+                              Regions lower on the list (like Endopiriform Nucleus) provide sparse, modulatory feedback. If a bar is missing for a specific genotype, 
+                              it indicates that no significant monosynaptic connections were detected from that cell type in that region.</p>
+    </div>
+  `
+};
+
+function getCustomSelectionFlag(view){
+  ensureSelectionContainers();
+  return rabiesState.hasCustomSelectionByView[view] || false;
+}
+
+function setActiveView(view){
+  ensureSelectionContainers();
+  const v = view === 'bar' || view === 'dot' ? view : 'dot';
+  rabiesState.view = v;
+  if(!rabiesState.selectedRegionsByView[v]){
+    rabiesState.selectedRegionsByView[v] = new Set(v === 'bar' ? defaultRabiesBarRegions : defaultRabiesRegions);
+  }
+  rabiesState.selectedRegions = rabiesState.selectedRegionsByView[v];
+  rabiesState.hasCustomSelection = getCustomSelectionFlag(v);
+}
+
+function getActiveSelectionSet(){
+  ensureSelectionContainers();
+  if(!rabiesState.selectedRegionsByView[rabiesState.view]){
+    rabiesState.selectedRegionsByView[rabiesState.view] = new Set(
+      rabiesState.view === 'bar' ? defaultRabiesBarRegions : defaultRabiesRegions
+    );
+  }
+  const set = rabiesState.selectedRegionsByView[rabiesState.view];
+  rabiesState.selectedRegions = set;
+  return set;
+}
+
+function updateSelectionAllViews(mutator){
+  ensureSelectionContainers();
+  ['dot','bar'].forEach(view => {
+    if(!rabiesState.selectedRegionsByView[view]){
+      rabiesState.selectedRegionsByView[view] = new Set(view === 'bar' ? defaultRabiesBarRegions : defaultRabiesRegions);
+    }
+    mutator(rabiesState.selectedRegionsByView[view], view);
+  });
+  rabiesState.selectedRegions = rabiesState.selectedRegionsByView[rabiesState.view];
+}
+
+function renderInterpretation(){
+  if(!rabiesInterpretationEl) return;
+  const view = rabiesState.view;
+  const copy = rabiesInterpretationCopy[view] || rabiesInterpretationCopy.dot;
+  rabiesInterpretationEl.innerHTML = copy;
+}
+
+setActiveView(rabiesState.view);
 
 regionSearch?.addEventListener('input', (e) => {
   rabiesState.search = e.target.value.toLowerCase();
@@ -95,8 +312,10 @@ regionSearch?.addEventListener('input', (e) => {
 regionSearch?.addEventListener('change', (e) => {
   const val = (e.target.value || '').trim();
   if(val && rabiesState.regions.includes(val)){
-    rabiesState.selectedRegions.add(val);
+    updateSelectionAllViews(set => set.add(val));
+    const sel = getActiveSelectionSet();
     rabiesState.forceEmptyPlot = false;
+    setCustomSelectionAllViews(true);
     e.target.value = '';
     rabiesState.search = '';
     renderRegionList();
@@ -112,14 +331,22 @@ groupRadios.forEach(r => r.addEventListener('change', () => {
 
 rabiesResetBtn?.addEventListener('click', () => {
   rabiesState.forceEmptyPlot = false;
-  applyDefaultRabiesSelection();
+  if(rabiesState.view === 'bar'){
+    ensureSelectionContainers();
+    rabiesState.selectedRegionsByView.bar = new Set(defaultRabiesBarRegions);
+    rabiesState.selectedRegions = rabiesState.selectedRegionsByView.bar;
+    setCustomSelectionFlag('bar', false);
+  }else{
+    applyDefaultRabiesSelection();
+  }
   renderRegionList();
   renderRabiesPlots();
 });
 
 rabiesClearBtn?.addEventListener('click', () => {
-  rabiesState.selectedRegions = new Set();
+  updateSelectionAllViews(set => set.clear());
   rabiesState.forceEmptyPlot = true;
+  setCustomSelectionAllViews(true);
   renderRegionList();
   renderRabiesPlots();
 });
@@ -127,9 +354,9 @@ rabiesClearBtn?.addEventListener('click', () => {
 rabiesViewButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     const view = btn.getAttribute('data-rabies-view');
-    if(view !== 'dot' && view !== 'box' && view !== 'bar') return;
+    if(view !== 'dot' && view !== 'bar') return;
     if(rabiesState.view === view) return;
-    rabiesState.view = view;
+    setActiveView(view);
     rabiesZoomTransform = d3.zoomIdentity;
     updateRabiesViewButtons();
     renderRabiesPlots();
@@ -139,6 +366,11 @@ rabiesViewButtons.forEach(btn => {
 function updateRabiesViewButtons(){
   rabiesViewButtons.forEach(btn => {
     const view = btn.getAttribute('data-rabies-view');
+    if(view !== 'dot' && view !== 'bar'){
+      btn.classList.remove('is-active');
+      btn.setAttribute('aria-pressed', 'false');
+      return;
+    }
     btn.classList.toggle('is-active', view === rabiesState.view);
     btn.setAttribute('aria-pressed', view === rabiesState.view ? 'true' : 'false');
   });
@@ -153,6 +385,7 @@ function setRabiesMouseCount(n){
 // Render the rabies region checklist based on search and selection. 
 function renderRegionList(){
   if(!regionListEl) return;
+  const selectedSet = getActiveSelectionSet();
   regionListEl.innerHTML = '';
   // Highlight only regions with signal in current rabies data (ipsi or contra).
   const signalRegions = new Set();
@@ -171,26 +404,37 @@ function renderRegionList(){
     cb.type = 'checkbox';
     cb.id = id;
     cb.value = region;
-    cb.checked = rabiesState.selectedRegions.has(region);
+    cb.checked = selectedSet.has(region);
     cb.addEventListener('change', (e) => {
       // If all boxes unchecked, show a blank plot instead of falling back to all regions
+      setCustomSelectionAllViews(true);
+      updateSelectionAllViews(set => {
+        if(e.target.checked){
+          set.add(region);
+        }else{
+          set.delete(region);
+        }
+      });
+      const activeSel = getActiveSelectionSet();
       if(e.target.checked){
-        rabiesState.selectedRegions.add(region);
         rabiesState.forceEmptyPlot = false;
       }else{
-        rabiesState.selectedRegions.delete(region);
-        rabiesState.forceEmptyPlot = rabiesState.selectedRegions.size === 0;
+        rabiesState.forceEmptyPlot = activeSel.size === 0;
       }
       renderRabiesPlots();
     });
     const span = document.createElement('span');
-    span.textContent = region;
+    const acronym = regionAcronym(region);
+    const label = acronym && acronym !== region ? `${region} (${acronym})` : region;
+    span.textContent = label;
     wrapper.append(cb, span);
     regionListEl.append(wrapper);
   });
 }
 async function loadRabiesData(){
   rabiesState.loading = true;
+  // Preload qualitative ratings so bar tooltips can render without delay.
+  await loadRegionRatings();
   const treePromise = !rabiesState.regionTreeCached
     ? fetchJson(`${API}/regions/tree`).catch(err => {
         console.warn('Region tree load failed', err);
@@ -225,6 +469,7 @@ async function loadRabiesData(){
     // Seed region names from the data; may be overridden by the tree for stable acronyms.
     const regionSet = new Set(allData.map(d => d.region));
     defaultRabiesRegions.forEach(r => regionSet.add(r));
+    defaultRabiesBarRegions.forEach(r => regionSet.add(r));
     rabiesState.allRegions = Array.from(regionSet).sort();
     rabiesState.data = allData;
     // Await region tree to pre-populate acronyms before first render.
@@ -243,6 +488,16 @@ async function loadRabiesData(){
       rabiesState.regionTreeCached = true;
     }
     applyDefaultRabiesSelection();
+    ensureSelectionContainers();
+    if(!rabiesState.selectedRegionsByView.bar || rabiesState.selectedRegionsByView.bar.size === 0){
+      rabiesState.selectedRegionsByView.bar = new Set(defaultRabiesBarRegions);
+    }
+    if(rabiesState.view === 'bar'){
+      rabiesState.selectedRegions = rabiesState.selectedRegionsByView.bar;
+    }
+    if(typeof rabiesState.hasCustomSelectionByView?.bar === 'undefined'){
+      rabiesState.hasCustomSelectionByView.bar = false;
+    }
     rabiesState.regions = rabiesState.allRegions;
     renderRegionList();
     renderRabiesPlots();
@@ -264,24 +519,27 @@ function applyDefaultRabiesSelection(){
     if(pick && !matched.includes(pick)) matched.push(pick);
   });
   // Only keep those matches; no auto-fill with other regions
-  rabiesState.selectedRegions = new Set(matched);
+  ensureSelectionContainers();
+  const dotSet = new Set(matched);
+  rabiesState.selectedRegionsByView.dot = dotSet;
+  if(rabiesState.view === 'dot'){
+    rabiesState.selectedRegions = dotSet;
+  }
   rabiesState.forceEmptyPlot = false;
+  setCustomSelectionFlag('dot', false);
 }
 
 function renderRabiesPlots(){
+  renderInterpretation();
   if(rabiesFigureHead){
     const titles = {
       dot: {
         main: 'Bilateral Synaptic Inputs of Olfactory Areas',
-        sub: 'Distribution of Input Sources to Excitatory (VGLUT1) and Inhibitory (VGAT) Neurons'
-      },
-      box: {
-        main: 'Bilateral Synaptic Inputs of Olfactory Areas',
-        sub: 'Distribution of Input Sources to Excitatory (VGLUT1) and Inhibitory (VGAT) Neurons'
+        sub: 'Distribution of Projections to Excitatory (VGLUT1) and Inhibitory (VGAT) Neurons'
       },
       bar: {
-        main: 'Bilateral Synaptic Inputs of Olfactory Areas',
-        sub: 'Distribution of Input Sources to Excitatory (VGLUT1) and Inhibitory (VGAT) Neurons'
+        main: 'Afferent Inputs to AON (Interhemispheric Connectivity)',
+        sub: 'Distribution of Projections to Excitatory (VGLUT1) and Inhibitory (VGAT) Neurons'
       }
     };
     const t = titles[rabiesState.view] || titles.dot;
@@ -290,9 +548,7 @@ function renderRabiesPlots(){
       <div class="muted small" style="margin-bottom:6px;">${t.sub}</div>
     `;
   }
-  if(rabiesState.view === 'box'){
-    drawRabiesBoxPlot();
-  }else if(rabiesState.view === 'bar'){
+  if(rabiesState.view === 'bar'){
     drawRabiesDivergingPlot();
   }else{
     drawRabiesDotPlot();
@@ -301,6 +557,11 @@ function renderRabiesPlots(){
 
 /* Draw both ipsilateral and contralateral rabies dot plots. */
 function drawRabiesDotPlot(){
+  if(panelB){
+    panelB.style.display = '';
+    panelB.style.flex = '';
+    panelB.style.maxWidth = '';
+  }
   let regions = getOrderedRabiesRegions();
   let ipsiData = buildRabiesChartData('ipsilateral', regions);
   let contraData = buildRabiesChartData('contralateral', regions);
@@ -324,613 +585,190 @@ function drawRabiesDotPlot(){
   initSharedZoom();
 }
 
-function buildRabiesSummaryData(){
-  return [];
-}
-
-function drawRabiesBoxPlot(){
-  const data = buildRabiesSummaryData();
+function drawRabiesDivergingPlot(){
   const contraContainer = document.querySelector('#rabiesDotPlotContra');
   if(contraContainer){
     contraContainer.innerHTML = '';
     contraContainer.style.display = 'none';
   }
-  const ipsiSel = d3.select('#rabiesDotPlotIpsi');
-  ipsiSel.style('display','block');
-  ipsiSel.selectAll('*').remove();
-  if(!data.length) return;
+  rabiesPlotRefs = [];
+  if(panelB){
+    panelB.style.display = 'none';
+    panelB.style.flex = '0 0 0';
+    panelB.style.maxWidth = '0';
+  }
+  const container = d3.select('#rabiesDotPlotIpsi');
+  container.selectAll('*').remove();
+  let regions = getOrderedRabiesBarRegions();
+  if(rabiesState.forceEmptyPlot){
+    regions = defaultRabiesBarRegions;
+  }
+  const barData = buildRabiesBarData(regions);
+  if(rabiesState.forceEmptyPlot || !barData.length) return;
 
-  const sides = ['Ipsilateral','Contralateral'];
-  const groups = ['Vglut1','Vgat'];
-
-  const margin = { top: 80, right: 60, bottom: 50, left: 90 };
-  const width = 900;
-  const height = 560;
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-
-  const svg = ipsiSel.append('svg')
+  // Sort regions by the stronger genotype value so top signals float upward
+  const maxByRegion = {};
+  barData.forEach(d => {
+    maxByRegion[d.regionLabel] = Math.max(maxByRegion[d.regionLabel] || 0, d.value || 0);
+  });
+  const sortedRegions = Object.entries(maxByRegion)
+    .sort((a,b) => b[1] - a[1])
+    .map(([label]) => label);
+  const maxLabelChars = d3.max(sortedRegions, l => (l || '').length) || 10;
+  const leftMargin = Math.min(220, Math.max(110, maxLabelChars * 7)); // widen just enough for labels
+  const margin = { top: 40, right: 32, bottom: 50, left: leftMargin };
+  const containerNode = document.getElementById('rabiesDotPlotIpsi');
+  const width = Math.max(1000, containerNode?.getBoundingClientRect?.().width || 0);
+  const height = margin.top + margin.bottom + Math.max(sortedRegions.length * 32, 400);
+  const svg = container.append('svg')
     .attr('viewBox', `0 0 ${width} ${height}`)
     .attr('preserveAspectRatio','xMidYMid meet')
     .style('width','100%')
     .style('height','auto');
 
-  const color = d3.scaleOrdinal()
-    .domain(groups)
-    .range([accent2, accent1]);
+  const genotypes = ['Vglut1','Vgat'];
+  const color = d3.scaleOrdinal().domain(genotypes).range([accent2, accent1]);
 
-  const x = d3.scaleBand()
-    .domain(sides)
-    .range([margin.left, margin.left + innerWidth])
-    .padding(0.3);
+  const xMin = 0.01;
+  const xMax = 10000;
+  const x = d3.scaleLog().domain([xMin, xMax]).range([margin.left, width - margin.right]).clamp(true);
+  const y = d3.scaleBand().domain(sortedRegions).range([margin.top, height - margin.bottom]).paddingInner(0.25);
+  // Stack so VGAT sits above VGLUT1 within each region row
+  const ySub = d3.scaleBand().domain(['Vgat','Vglut1']).range([0, y.bandwidth()]).paddingInner(0.2);
 
-  const xSub = d3.scalePoint()
-    .domain(groups)
-    .range([-30, 30]);
-
-  const vals = data.map(d => d.value).filter(v => v > 0);
-  const minPos = vals.length ? Math.min(...vals) : 0.0001;
-  const y = d3.scaleLog()
-    .domain([minPos, d3.max(vals) || 1])
-    .range([margin.top + innerHeight, margin.top]);
-
-  // axis
-  svg.append('g')
-    .attr('transform', `translate(0,${margin.top + innerHeight})`)
-    .call(d3.axisBottom(x))
-    .call(g => g.selectAll('text').attr('font-size', 14).attr('fill', '#1f2937'));
+  // axes
+  const xAxis = d3.axisBottom(x).ticks(6, "~g");
+  const xAxisG = svg.append('g')
+    .attr('transform', `translate(0,${height - margin.bottom})`)
+    .call(xAxis)
+    .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
+    .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'));
   svg.append('g')
     .attr('transform', `translate(${margin.left},0)`)
-    .call(d3.axisLeft(y).ticks(6, "~g"))
-    .call(g => g.selectAll('text').attr('font-size', 14).attr('fill', '#1f2937'));
-
+    .call(d3.axisLeft(y).tickSizeOuter(0))
+    .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'));
   svg.append('text')
-    .attr('x', margin.left + innerWidth/2)
-    .attr('y', margin.top + innerHeight + 40)
+    .attr('transform', `translate(${margin.left - 50}, ${(height - margin.bottom + margin.top)/2}) rotate(-90)`)
     .attr('text-anchor','middle')
     .attr('fill','#1f2937')
-    .attr('font-size',14)
-    .text('Total Input Count (Log10)');
+    .attr('font-size', 12.5)
+    .text('Mouse Brain Regions');
 
-  // stats per side+group
-  const grouped = d3.rollups(
-    data,
-    vals => {
-      const arr = vals.map(v => v.value).filter(Number.isFinite).sort((a,b)=>a-b);
-      const q1 = d3.quantileSorted(arr, 0.25) || minPos;
-      const median = d3.quantileSorted(arr, 0.5) || minPos;
-      const q3 = d3.quantileSorted(arr, 0.75) || minPos;
-      return { q1, median, q3, whiskerLow: arr[0] || minPos, whiskerHigh: arr[arr.length-1] || minPos, n: arr.length };
-    },
-    d => d.side,
-    d => d.group
-  );
+  // gridlines
+  svg.append('g')
+    .selectAll('line')
+    .data(x.ticks(6))
+    .enter()
+    .append('line')
+    .attr('x1', d => x(d))
+    .attr('x2', d => x(d))
+    .attr('y1', margin.top)
+    .attr('y2', height - margin.bottom)
+    .attr('stroke', '#eef2f7')
+    .attr('stroke-dasharray', '2,2')
+    .attr('stroke-width', 1);
 
-  const boxLayer = svg.append('g');
-  grouped.forEach(([side, byGroup]) => {
-    const sideX = x(side) + x.bandwidth()/2;
-    byGroup.forEach(([geno, stats]) => {
-      const cx = sideX + (xSub(geno) || 0);
-      // box
-      boxLayer.append('rect')
-        .attr('x', cx - 18)
-        .attr('width', 36)
-        .attr('y', y(stats.q3))
-        .attr('height', y(stats.q1) - y(stats.q3))
-        .attr('fill', color(geno))
-        .attr('fill-opacity', 0.15)
-        .attr('stroke', color(geno))
-        .attr('stroke-width', 2);
-      // median
-      boxLayer.append('line')
-        .attr('x1', cx - 18)
-        .attr('x2', cx + 18)
-        .attr('y1', y(stats.median))
-        .attr('y2', y(stats.median))
-        .attr('stroke', color(geno))
-        .attr('stroke-width', 2.2);
-      // whiskers
-      boxLayer.append('line')
-        .attr('x1', cx)
-        .attr('x2', cx)
-        .attr('y1', y(stats.whiskerLow))
-        .attr('y2', y(stats.whiskerHigh))
-        .attr('stroke', '#94a3b8')
-        .attr('stroke-width', 1.4);
-      boxLayer.append('line')
-        .attr('x1', cx - 12)
-        .attr('x2', cx + 12)
-        .attr('y1', y(stats.whiskerLow))
-        .attr('y2', y(stats.whiskerLow))
-        .attr('stroke', '#94a3b8')
-        .attr('stroke-width', 1.4);
-      boxLayer.append('line')
-        .attr('x1', cx - 12)
-        .attr('x2', cx + 12)
-        .attr('y1', y(stats.whiskerHigh))
-        .attr('y2', y(stats.whiskerHigh))
-        .attr('stroke', '#94a3b8')
-        .attr('stroke-width', 1.4);
-    });
-  });
+  // bars
+  const bars = svg.append('g')
+    .selectAll('rect')
+    .data(barData)
+    .enter()
+    .append('rect')
+    .attr('x', x(xMin))
+    .attr('y', d => y(d.regionLabel) + (ySub(d.group) || 0))
+    .attr('height', ySub.bandwidth())
+    .attr('width', d => Math.max(1, x(Math.max(xMin, d.value)) - x(xMin)))
+    .attr('fill', d => color(d.group))
+    .attr('fill-opacity', 0.8)
+    .on('mouseenter', (event, d) => showBarTooltip(event, d))
+    .on('mouseleave', hideTooltip);
 
-  // jittered points
-  const jitterLayer = svg.append('g');
-  data.forEach(d => {
-    const cx = x(d.side) + x.bandwidth()/2 + (xSub(d.group) || 0) + (Math.random()-0.5)*10;
-    const val = d.value > 0 ? d.value : minPos;
-    jitterLayer.append('circle')
-      .attr('cx', cx)
-      .attr('cy', y(val))
-      .attr('r', 4)
-      .attr('fill', color(d.group))
-      .attr('fill-opacity', 0.35)
-      .attr('stroke', color(d.group))
-      .attr('stroke-width', 1.6);
-  });
+  // axes labels
+  svg.append('text')
+    .attr('x', margin.left + (width - margin.left - margin.right)/2)
+    .attr('y', height - 10)
+    .attr('text-anchor','middle')
+    .attr('fill','#1f2937')
+    .attr('font-size', 12.5)
+    .text('Mean normalized value (% of AON) [log scale]');
 
-  // legend
-  const legend = svg.append('g').attr('transform', `translate(${margin.left}, ${margin.top - 36})`);
-  const legendItems = groups;
-  const legendGap = 90;
-  legendItems.forEach((gLabel, i) => {
-    const g = legend.append('g').attr('transform', `translate(${i*legendGap},0)`);
-    g.append('rect')
-      .attr('x', 0)
-      .attr('y', -8)
-      .attr('width', 18)
-      .attr('height', 18)
-      .attr('rx', 3)
-      .attr('fill', color(gLabel))
-      .attr('fill-opacity', 0.25)
-      .attr('stroke', color(gLabel))
-      .attr('stroke-width', 2);
-    g.append('text')
-      .attr('x', 24)
-      .attr('y', 6)
-      .attr('fill', '#374151')
-      .attr('font-size', 13)
-      .text(gLabel);
-  });
-}
-
-function drawRabiesDivergingPlot(){
-  let regions = getOrderedRabiesRegions();
-  let ipsiData = buildRabiesDivergingData('ipsilateral', regions);
-  let contraData = buildRabiesDivergingData('contralateral', regions);
-  const contraContainer = document.querySelector('#rabiesDotPlotContra');
-  if(contraContainer) contraContainer.style.display = '';
-  if(rabiesState.forceEmptyPlot){
-    regions = defaultRabiesRegions;
-    ipsiData = [];
-    contraData = [];
-  }
-  const peakVal = d3.max([...ipsiData, ...contraData], d => Math.abs(d.signedPerc) || 0) || 0;
-  const domainMax = peakVal > 0 ? peakVal * 1.1 : 1;
-  const rows = Math.max(regions.length, 9);
-  const rowSpacing = 32;
-  const innerSide = Math.max(560, rows * rowSpacing);
-  rabiesPlotRefs = [];
-  const ipsiRef = drawRabiesDivergingSingle('ipsilateral', '#rabiesDotPlotIpsi', ipsiData, regions, domainMax, innerSide);
-  const contraRef = drawRabiesDivergingSingle('contralateral', '#rabiesDotPlotContra', contraData, regions, domainMax, innerSide);
-  if(ipsiRef) rabiesPlotRefs.push(ipsiRef);
-  if(contraRef) rabiesPlotRefs.push(contraRef);
+  rabiesPlotRefs = [{
+    type: 'bar',
+    bars,
+    svg,
+    x0: x,
+    y,
+    xMin,
+    xAxis,
+    xAxisG,
+    xGridGroup: null,
+    plotLeft: margin.left,
+    plotRight: width - margin.right,
+    height
+  }];
   initSharedZoom();
 }
 
-function buildRabiesDivergingData(hemiKey, regions){
-  const valuesSource = rabiesState.dataByHemi[hemiKey] || [];
-  const output = [];
-  regions.forEach(region => {
-    const regionLabel = regionAcronym(region);
-    valuesSource
-      .filter(v => v.region === region)
-      .forEach(v => {
-        const geno = (v.genotype || '').trim();
-        if(geno !== 'Vglut1' && geno !== 'Vgat') return;
-        const val = (v.load_fraction ?? 0) * 100;
-        const signedVal = geno === 'Vgat' ? -val : val;
-        output.push({
-          region,
-          regionLabel,
-          group: geno,
-          valuePerc: val,
-          signedPerc: signedVal,
-          subject: v.subject_id
-        });
-      });
+function buildRabiesBarData(regions){
+  const regionList = regions && regions.length ? regions : defaultRabiesBarRegions;
+  // Always derive normalization from the raw contralateral values.
+  const valuesSource = rabiesState.dataByHemi?.contralateral || [];
+  const allowedGenos = ['Vglut1','Vgat'];
+  const valuesByRegion = new Map();
+  valuesSource.forEach(v => {
+    const regionName = v.region;
+    const g = (v.genotype || '').trim();
+    if(!regionName || !allowedGenos.includes(g)) return;
+    const lf = typeof v.load === 'number'
+      ? v.load
+      : (typeof v.load_fraction === 'number' ? v.load_fraction : 0);
+    if(!Number.isFinite(lf)) return;
+    const entry = valuesByRegion.get(regionName) || { Vglut1: [], Vgat: [] };
+    const arr = entry[g] || [];
+    arr.push(lf);
+    entry[g] = arr;
+    valuesByRegion.set(regionName, entry);
   });
-  return output;
-}
-
-function drawRabiesDivergingSingle(hemiKey, selector, chartData, regions, domainMax, innerSide){
-  const container = d3.select(selector);
-  if(container.empty()) return null;
-  container.selectAll('*').remove();
-  const regionList = (regions && regions.length) ? regions : defaultRabiesRegions;
-  const margin = rabiesPlotMargins;
-  const plotLeft = margin.left;
-  const plotTop = margin.top;
-  const plotRight = plotLeft + innerSide;
-  const plotBottom = plotTop + innerSide;
-  const width = plotRight + 32;
-  const height = plotBottom + margin.bottom;
-  const axisColor = '#94a3b8';
-  const axisTextColor = '#1f2937';
-  const svg = container.append('svg')
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .attr('preserveAspectRatio', 'xMidYMid meet')
-    .style('width','100%')
-    .style('height','auto');
-
-  const xRangeStart = plotLeft + 8;
-  const xRangeEnd = plotRight - 8;
-  const x = d3.scaleLinear()
-    .domain([-domainMax, domainMax])
-    .range([xRangeStart, xRangeEnd]);
-
-  const regionLabels = regionList.map(r => regionAcronym(r));
-  const y = d3.scalePoint()
-    .domain(regionLabels)
-    .range([plotTop, plotBottom])
-    .padding(0.35);
-
-  const color = d3.scaleOrdinal()
-    .domain(['Vglut1','Vgat'])
-    .range([accent2, accent1]);
-
-  const clipId = `clip-bar-${hemiKey}-${Math.random().toString(36).slice(2,7)}`;
-  const defs = svg.append('defs');
-  defs.append('clipPath')
-    .attr('id', clipId)
-    .append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide);
-
-  const plotGroup = svg.append('g').attr('clip-path', `url(#${clipId})`);
-  plotGroup.append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide)
-    .attr('fill', '#f8fafc');
-
-  const xAxis = d3.axisBottom(x).ticks(6).tickSizeOuter(0).tickFormat(d => `${Math.abs(d)}%`);
-  const xGrid = d3.axisBottom(x).ticks(6).tickSize(-(innerSide)).tickFormat(() => '');
-  const xAxisTop = d3.axisTop(x).ticks(6).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
-  const yAxis = d3.axisLeft(y).tickSizeOuter(0);
-  const yAxisRight = d3.axisRight(y).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
-  const xMinDomain = -domainMax;
-
-  const xGridGroup = plotGroup.append('g')
-    .attr('transform', `translate(0,${plotBottom})`)
-    .call(xGrid)
-    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-    .call(g => g.selectAll('text').remove())
-    .call(g => g.selectAll('.domain').remove());
-
-  plotGroup.append('g')
-    .attr('transform', `translate(${plotLeft},0)`)
-    .call(d3.axisLeft(y).tickSize(-(innerSide)).tickFormat(() => ''))
-    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-    .call(g => g.selectAll('text').remove())
-    .call(g => g.selectAll('.domain').remove());
-
-  svg.append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide)
-    .attr('fill', 'none')
-    .attr('stroke', axisColor)
-    .attr('stroke-width', 1.4);
-
-  plotGroup.append('line')
-    .attr('x1', x(0))
-    .attr('x2', x(0))
-    .attr('y1', plotTop)
-    .attr('y2', plotBottom)
-    .attr('stroke', '#cbd5e1')
-    .attr('stroke-width', 1.5)
-    .attr('stroke-dasharray', '2,2');
-
-  const barHeight = 16;
-  const offsetForGroup = g => g === 'Vglut1' ? -8 : 8;
-
-  const bars = plotGroup.append('g')
-    .selectAll('rect.bar')
-    .data(chartData)
-    .enter()
-    .append('rect')
-    .attr('class','bar')
-    .attr('x', d => Math.min(x(0), x(d.signedPerc)))
-    .attr('y', d => y(d.regionLabel) + offsetForGroup(d.group) - barHeight/2)
-    .attr('width', d => Math.max(1, Math.abs(x(d.signedPerc) - x(0))))
-    .attr('height', barHeight)
-    .attr('rx', 6)
-    .attr('fill', d => color(d.group))
-    .attr('fill-opacity', 0.12)
-    .attr('stroke', d => color(d.group))
-    .attr('stroke-width', 1.6);
-
-  const xAxisG = svg.append('g')
-    .attr('transform', `translate(0,${plotBottom})`)
-    .call(xAxis)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('text').attr('fill', axisTextColor).attr('font-size', 11.5))
-    .call(g => g.append('text')
-      .attr('x', xRangeStart + (xRangeEnd - xRangeStart)/2)
-      .attr('y', 36)
-      .attr('fill', axisTextColor)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 12)
-      .text('Relative Input Strength (% of Total Signal)'));
-
-  svg.append('g')
-    .attr('transform', `translate(0,${plotTop})`)
-    .call(xAxisTop)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').remove())
-    .call(g => g.selectAll('text').remove());
-
-  const yAxisG = svg.append('g')
-    .attr('transform', `translate(${plotLeft},0)`)
-    .call(yAxis)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2));
-
-  yAxisG.selectAll('text')
-    .attr('font-size', 11.5)
-    .attr('fill', axisTextColor)
-    .attr('text-anchor', 'end')
-    .attr('x', -10)
-    .attr('opacity', 1);
-
-  svg.append('g')
-    .attr('transform', `translate(${plotRight},0)`)
-    .call(yAxisRight)
-    .call(g => g.selectAll('domain').remove())
-    .call(g => g.selectAll('line').remove())
-    .call(g => g.selectAll('text').remove());
-
-  return {
-    type:'bar',
-    hemiKey,
-    svg,
-    x0: x,
-    y,
-    xAxis,
-    xGrid,
-    xMin: xMinDomain,
-    xAxisG,
-    xGridGroup,
-    bars,
-    innerSide,
-    plotLeft,
-    plotRight,
-    height,
-    data: chartData,
-    barHeight,
-    offsetForGroup
+  const meanFor = (regionName, geno) => {
+    const entry = valuesByRegion.get(regionName);
+    const vals = entry?.[geno] || [];
+    return vals.length ? d3.mean(vals) : 0;
   };
-}
-
-function buildRabiesBoxData(hemiKey, regions){
-  return [];
-}
-
-function drawRabiesBoxSingle(hemiKey, selector, chartData, regions, domainMax, innerSide){
-  const container = d3.select(selector);
-  if(container.empty()) return null;
-  container.selectAll('*').remove();
-  const regionList = (regions && regions.length) ? regions : defaultRabiesRegions;
-  const margin = rabiesPlotMargins;
-  const plotLeft = margin.left;
-  const plotTop = margin.top;
-  const plotRight = plotLeft + innerSide;
-  const plotBottom = plotTop + innerSide;
-  const width = plotRight + 32;
-  const height = plotBottom + margin.bottom;
-  const axisColor = '#94a3b8';
-  const axisTextColor = '#1f2937';
-  const svg = container.append('svg')
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .attr('preserveAspectRatio', 'xMidYMid meet')
-    .style('width','100%')
-    .style('height','auto');
-
-  const xRangeStart = plotLeft + 8;
-  const xRangeEnd = plotRight - 8;
-  const x = d3.scaleLinear()
-    .domain([0, domainMax || 1])
-    .range([xRangeStart, xRangeEnd]);
-
-  const regionLabels = regionList.map(r => regionAcronym(r));
-  const y = d3.scalePoint()
-    .domain(regionLabels)
-    .range([plotTop, plotBottom])
-    .padding(0.35);
-
-  const color = d3.scaleOrdinal()
-    .domain(['Vglut1','Vgat'])
-    .range([accent2, accent1]);
-
-  const clipId = `clip-box-${hemiKey}-${Math.random().toString(36).slice(2,7)}`;
-  const defs = svg.append('defs');
-  defs.append('clipPath')
-    .attr('id', clipId)
-    .append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide);
-
-  const plotGroup = svg.append('g').attr('clip-path', `url(#${clipId})`);
-  plotGroup.append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide)
-    .attr('fill', '#f8fafc');
-
-  const xAxis = d3.axisBottom(x).ticks(6).tickSizeOuter(0);
-  const xGrid = d3.axisBottom(x).ticks(6).tickSize(-(innerSide)).tickFormat(() => '');
-  const xAxisTop = d3.axisTop(x).ticks(6).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
-  const yAxis = d3.axisLeft(y).tickSizeOuter(0);
-  const yAxisRight = d3.axisRight(y).tickSize(0).tickSizeOuter(0).tickFormat(() => '');
-
-  const xGridGroup = plotGroup.append('g')
-    .attr('transform', `translate(0,${plotBottom})`)
-    .call(xGrid)
-    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-    .call(g => g.selectAll('text').remove())
-    .call(g => g.selectAll('.domain').remove());
-  plotGroup.append('g')
-    .attr('transform', `translate(${plotLeft},0)`)
-    .call(d3.axisLeft(y).tickSize(-(innerSide)).tickFormat(() => ''))
-    .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-    .call(g => g.selectAll('text').remove())
-    .call(g => g.selectAll('.domain').remove());
-
-  svg.append('rect')
-    .attr('x', plotLeft)
-    .attr('y', plotTop)
-    .attr('width', innerSide)
-    .attr('height', innerSide)
-    .attr('fill', 'none')
-    .attr('stroke', axisColor)
-    .attr('stroke-width', 1.4);
-
-  const offsetForGroup = (g) => g === 'Vglut1' ? -7 : 7;
-  const boxHeight = 14;
-
-  const boxes = plotGroup.append('g')
-    .selectAll('rect.box')
-    .data(chartData)
-    .enter()
-    .append('rect')
-    .attr('class','box')
-    .attr('x', d => x(d.q1))
-    .attr('width', d => Math.max(1, x(d.q3) - x(d.q1)))
-    .attr('y', d => y(d.regionLabel) + offsetForGroup(d.group) - boxHeight/2)
-    .attr('height', boxHeight)
-    .attr('rx', 4)
-    .attr('fill', d => color(d.group))
-    .attr('fill-opacity', 0.12)
-    .attr('stroke', d => color(d.group))
-    .attr('stroke-width', 1.8);
-
-  const medians = plotGroup.append('g')
-    .selectAll('line.med')
-    .data(chartData)
-    .enter()
-    .append('line')
-    .attr('class','med')
-    .attr('x1', d => x(d.median))
-    .attr('x2', d => x(d.median))
-    .attr('y1', d => y(d.regionLabel) + offsetForGroup(d.group) - boxHeight/2)
-    .attr('y2', d => y(d.regionLabel) + offsetForGroup(d.group) + boxHeight/2)
-    .attr('stroke', d => color(d.group))
-    .attr('stroke-width', 2.2);
-
-  const whiskers = plotGroup.append('g')
-    .selectAll('line.whisker')
-    .data(chartData)
-    .enter()
-    .append('line')
-    .attr('class','whisker')
-    .attr('x1', d => x(d.whiskerLow))
-    .attr('x2', d => x(d.whiskerHigh))
-    .attr('y1', d => y(d.regionLabel) + offsetForGroup(d.group))
-    .attr('y2', d => y(d.regionLabel) + offsetForGroup(d.group))
-    .attr('stroke', '#cbd5e1')
-    .attr('stroke-width', 2);
-
-  const whiskerCaps = plotGroup.append('g')
-    .selectAll('line.cap')
-    .data(chartData.flatMap(d => ([
-      { ...d, cap:'low', xVal: d.whiskerLow },
-      { ...d, cap:'high', xVal: d.whiskerHigh }
-    ])))
-    .enter()
-    .append('line')
-    .attr('class','cap')
-    .attr('x1', d => x(d.xVal))
-    .attr('x2', d => x(d.xVal))
-    .attr('y1', d => y(d.regionLabel) + offsetForGroup(d.group) - boxHeight/2)
-    .attr('y2', d => y(d.regionLabel) + offsetForGroup(d.group) + boxHeight/2)
-    .attr('stroke', '#cbd5e1')
-    .attr('stroke-width', 2);
-
-  const xAxisG = svg.append('g')
-    .attr('transform', `translate(0,${plotBottom})`)
-    .call(xAxis)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('text').attr('fill', axisTextColor).attr('font-size', 11.5))
-    .call(g => g.append('text')
-      .attr('x', xRangeStart + (xRangeEnd - xRangeStart)/2)
-      .attr('y', 36)
-      .attr('fill', axisTextColor)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', 12)
-      .text('Relative Input Strength (% of Total Signal)'));
-
-  svg.append('g')
-    .attr('transform', `translate(0,${plotTop})`)
-    .call(xAxisTop)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').remove())
-    .call(g => g.selectAll('text').remove());
-
-  const yAxisG = svg.append('g')
-    .attr('transform', `translate(${plotLeft},0)`)
-    .call(yAxis)
-    .call(g => g.selectAll('.domain').attr('stroke', axisColor).attr('stroke-width',1.2))
-    .call(g => g.selectAll('line').attr('stroke', axisColor).attr('stroke-width',1.2));
-
-  yAxisG.selectAll('text')
-    .attr('font-size', 11.5)
-    .attr('fill', axisTextColor)
-    .attr('text-anchor', 'end')
-    .attr('x', -10)
-    .attr('opacity', 1);
-
-  svg.append('g')
-    .attr('transform', `translate(${plotRight},0)`)
-    .call(yAxisRight)
-    .call(g => g.selectAll('domain').remove())
-    .call(g => g.selectAll('line').remove())
-    .call(g => g.selectAll('text').remove());
-
-  return {
-    type:'box',
-    hemiKey,
-    svg,
-    x0: x,
-    y,
-    xAxis,
-    xGrid,
-    xAxisG,
-    xGridGroup,
-    boxes,
-    medians,
-    whiskers,
-    whiskerCaps,
-    offsetForGroup,
-    boxHeight,
-    innerSide,
-    plotLeft,
-    plotRight,
-    height
+  const findReferenceValue = () => {
+    // Prefer the explicit name; fall back to acronym match if needed.
+    let ref = meanFor('Anterior olfactory nucleus', 'Vglut1');
+    if(ref > 0) return ref;
+    for(const [regionName] of valuesByRegion){
+      const label = regionAcronym(regionName);
+      if((label || '').toUpperCase() === 'AON'){
+        const candidate = meanFor(regionName, 'Vglut1');
+        if(candidate > 0){
+          ref = candidate;
+          break;
+        }
+      }
+    }
+    return ref > 0 ? ref : 1; // avoid division by zero
   };
+  const referenceValue = findReferenceValue();
+  const out = [];
+  regionList.forEach(region => {
+    const regionLabel = regionAcronym(region);
+    allowedGenos.forEach(g => {
+      const mean = meanFor(region, g);
+      const scaled = (mean / referenceValue) * 100;
+      out.push({
+        region,
+        regionLabel,
+        group: g,
+        value: Math.max(0.0001, scaled)
+      });
+    });
+  });
+  return out;
 }
 
-// Build chart-ready rows for a hemisphere, respecting current grouping.
-// Note: We plot relative signal (load_fraction) because absolute cell counts/starters are not available in the source CSVs.
+
 function buildRabiesChartData(hemiKey, regions){
   const valuesSource = rabiesState.dataByHemi[hemiKey] || [];
   if(!regions.length) return [];
@@ -1049,24 +887,37 @@ function buildRabiesChartData(hemiKey, regions){
   }));
 }
 
-// Selected regions (or all available if none manually chosen), ordered with defaults first.
-function getOrderedRabiesRegions(){
-  const selected = rabiesState.selectedRegions.size
-    ? Array.from(rabiesState.selectedRegions)
-    : Array.from(new Set(rabiesState.data.map(d => d.region)));
+function orderRegionsWithDefault(selectedList, defaultList){
   const seen = new Set();
   const ordered = [];
-  // prioritize default order
-  defaultRabiesRegions.forEach(def => {
-    const match = selected.find(r => r.toLowerCase() === def.toLowerCase());
+  defaultList.forEach(def => {
+    const match = selectedList.find(r => r.toLowerCase() === def.toLowerCase());
     if(match && !seen.has(match)){ ordered.push(match); seen.add(match); }
   });
-  // append remaining alphabetically
-  selected
+  selectedList
     .filter(r => !seen.has(r))
     .sort((a,b) => a.localeCompare(b))
     .forEach(r => { seen.add(r); ordered.push(r); });
   return ordered;
+}
+
+// Selected regions (or all available if none manually chosen), ordered with defaults first.
+function getOrderedRabiesRegions(){
+  ensureSelectionContainers();
+  const selectedSet = rabiesState.selectedRegionsByView.dot || new Set();
+  const selected = selectedSet.size
+    ? Array.from(selectedSet)
+    : Array.from(new Set(rabiesState.data.map(d => d.region)));
+  return orderRegionsWithDefault(selected, defaultRabiesRegions);
+}
+
+function getOrderedRabiesBarRegions(){
+  ensureSelectionContainers();
+  const barSet = rabiesState.selectedRegionsByView.bar || new Set();
+  const selected = barSet.size ? Array.from(barSet) : [];
+  const useDefaultBar = !getCustomSelectionFlag('bar') || selected.length === 0;
+  const base = useDefaultBar ? defaultRabiesBarRegions : selected;
+  return orderRegionsWithDefault(base, defaultRabiesBarRegions);
 }
 
 function regionAcronym(name){
@@ -1354,7 +1205,9 @@ function applySharedZoom(){
   rabiesPlotRefs.forEach(ref => {
     const t = d3.zoomIdentity.translate(rabiesZoomTransform.x, 0).scale(rabiesZoomTransform.k);
     const zx = t.rescaleX(ref.x0);
-    ref.xAxisG.call(ref.xAxis.scale(zx));
+    if(ref.xAxis && ref.xAxisG){
+      ref.xAxisG.call(ref.xAxis.scale(zx));
+    }
     if(ref.xGridGroup){
       ref.xGridGroup.call(ref.xGrid.scale(zx))
         .call(g => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
@@ -1362,22 +1215,10 @@ function applySharedZoom(){
         .call(g => g.selectAll('.domain').remove());
     }
     if(ref.type === 'bar'){
+      const minX = ref.xMin || 0.0001;
       ref.bars
-        .attr('x', d => Math.min(zx(0), zx(d.signedPerc)))
-        .attr('width', d => Math.max(1, Math.abs(zx(d.signedPerc) - zx(0))));
-    }else if(ref.type === 'box'){
-      ref.boxes
-        .attr('x', d => zx(d.q1))
-        .attr('width', d => Math.max(1, zx(d.q3) - zx(d.q1)));
-      ref.medians
-        .attr('x1', d => zx(d.median))
-        .attr('x2', d => zx(d.median));
-      ref.whiskers
-        .attr('x1', d => zx(d.whiskerLow))
-        .attr('x2', d => zx(d.whiskerHigh));
-      ref.whiskerCaps
-        .attr('x1', d => zx(d.xVal))
-        .attr('x2', d => zx(d.xVal));
+        .attr('x', () => zx(minX))
+        .attr('width', d => Math.max(1, zx(Math.max(minX, d.value)) - zx(minX)));
     }else{
       if(ref.errBars){
         ref.errBars
@@ -1432,8 +1273,58 @@ function hideTooltip(){
   if(tooltip) tooltip.hidden = true;
 }
 
-async function updateRabiesCharts(params){
-  // Deprecated bar chart; Cleveland plot handled separately.
+function showBarTooltip(event, d){
+  if(!tooltip) return;
+  tooltip.hidden = false;
+  const rating = regionRatings[d.region] || {};
+  const regionName = d.region || d.regionLabel;
+  const hasRatings = rating && (rating.VGLUT1 || rating.VGAT || rating.Vglut1 || rating.Vgat);
+  const buildTable = () => {
+    const toRow = (genoLabel) => {
+      const key = genoLabel.toUpperCase();
+      const entry = rating[key] || {};
+      const ipsi = entry.Ipsi;
+      const contra = entry.Contra;
+      if(typeof ipsi === 'undefined' && typeof contra === 'undefined') return '';
+      return `<tr><td>${genoLabel}</td><td>${ipsi ?? '–'}</td><td>${contra ?? '–'}</td></tr>`;
+    };
+    const rows = [toRow('Vglut1'), toRow('Vgat')].filter(Boolean).join('');
+    if(!rows) return '';
+    return `
+      <div class="muted small" style="margin-top:6px;">Connectivity rating</div>
+      <table class="small" style="margin-top:2px;">
+        <thead><tr><th></th><th>Ipsi</th><th>Contra</th></tr></thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    `;
+  };
+  const toRow = (genoLabel) => {
+    const key = genoLabel.toUpperCase();
+    const entry = rating[key] || {};
+    const ipsi = entry.Ipsi || '–';
+    const contra = entry.Contra || '–';
+    return `<tr><td>${genoLabel}</td><td>${ipsi}</td><td>${contra}</td></tr>`;
+  };
+  const valTxt = d.value ? d.value.toExponential(2) : '0';
+  tooltip.innerHTML = `
+    <strong>${regionName}</strong><br/>
+    Genotype: ${d.group}<br/>
+    Value: ${valTxt}<br/>
+    ${hasRatings ? buildTable() : ''}
+  `;
+  const rect = tooltip.getBoundingClientRect();
+  const parent = tooltip.parentElement || document.body;
+  const parentRect = parent.getBoundingClientRect();
+  const desiredLeft = event.clientX - parentRect.left;
+  const desiredTop = event.clientY - parentRect.top;
+  const maxLeft = parentRect.width - rect.width;
+  const maxTop = parentRect.height - rect.height;
+  const clampedLeft = Math.max(0, Math.min(desiredLeft, maxLeft));
+  const clampedTop = Math.max(0, Math.min(desiredTop, maxTop));
+  tooltip.style.left = `${clampedLeft}px`;
+  tooltip.style.top = `${clampedTop}px`;
 }
 
 function initRabiesDashboard(){

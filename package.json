@@ -1,0 +1,7 @@
+{
+  "name": "capstone-web-tools",
+  "private": true,
+  "scripts": {
+    "check:unused-css": "node scripts/check-unused-css.js"
+  }
+}
