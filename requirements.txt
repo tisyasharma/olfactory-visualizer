@@ -9,4 +9,6 @@ zarr
 fastapi
 uvicorn
 pydantic
+python-multipart
+scikit-image
 pytest

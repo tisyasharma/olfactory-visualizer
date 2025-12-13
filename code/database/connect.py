@@ -7,10 +7,11 @@ import sys
 from sqlalchemy import create_engine, text
 
 # CONNECTION SETTINGS
-# Since you are on localhost with your user, this URL is correct based on your previous file.
-# If you ever add a password, it would look like: tisyasharma:password@localhost...
 # Prefer env override so dev/prod can differ without code changes
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://tisyasharma@localhost:5432/murthy_db")
+# Fix Render/Supabase style prefixes (postgres://) that SQLAlchemy doesn't accept
+if DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
 
 def get_engine():
     """Creates and returns a database engine."""
