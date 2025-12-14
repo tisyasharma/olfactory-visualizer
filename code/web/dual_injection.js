@@ -142,7 +142,7 @@ function renderDoubleInterpretation(){
           <ul class="insight-text" style="margin:0; padding-left:18px;">
             <li style="margin-bottom:4px;"><strong>Percentage Area Covered:</strong> Values represent the density of axonal collaterals in the target region.</li>
             <li><strong>The Delta (Difference):</strong> 
-              <span style="color:var(--accent1); font-weight:600;">Red bars</span> indicate targets favored by Contra-projecting cells.<br/>
+              <span style="color:var(--accent1); font-weight:600;">Red bars</span> indicate targets favored by Contra-projecting cells.
               <span style="color:var(--accent2); font-weight:600;">Blue bars</span> indicate targets favored by the General VGLUT1 population.
             </li>
           </ul>
@@ -560,13 +560,30 @@ function drawDivergingBarChart(){
   const computedWidth = Math.max(rect?.width || 0, parentWidth || 0, panelWidth || 0);
   const width = Math.max(computedWidth, 900);
   const margin = { top: 80, right: 24, bottom: 50, left: 100 };
+  const calcDomain = (primaryData) => {
+    const base = (primaryData && primaryData.length) ? primaryData : aggregateDoubleData(null);
+    const minDelta = d3.min(base, d => d.delta);
+    const maxDelta = d3.max(base, d => d.delta);
+    if(!Number.isFinite(minDelta) || !Number.isFinite(maxDelta)){
+      return [-40, 40];
+    }
+    const padding = (maxDelta - minDelta) * 0.1;
+    const domain = [minDelta - padding, maxDelta + padding];
+    if(domain[0] === domain[1]){
+      domain[0] -= 1;
+      domain[1] += 1;
+    }
+    if(domain[0] > 0) domain[0] = 0;
+    if(domain[1] < 0) domain[1] = 0;
+    return domain;
+  };
 
   if(emptyState){
     // Render an empty frame (no ticks/labels) but keep axes and zero line.
     const placeholderRegions = defaultDoubleDivergingRegions;
     const rows = Math.max(placeholderRegions.length, 8);
     const height = Math.max(margin.top + margin.bottom + rows * 28, 520);
-    const x = d3.scaleLinear().domain([-35, 15]).range([margin.left, width - margin.right]).clamp(true);
+    const x = d3.scaleLinear().domain(calcDomain(null)).range([margin.left, width - margin.right]).nice();
     const y = d3.scaleBand().domain(placeholderRegions).range([margin.top, height - margin.bottom]).padding(0.25);
 
     const svg = container.append('svg')
@@ -632,7 +649,7 @@ function drawDivergingBarChart(){
     const placeholderRegions = defaultDoubleDivergingRegions;
     const rows = Math.max(placeholderRegions.length, 8);
     const height = Math.max(margin.top + margin.bottom + rows * 28, 520);
-    const x = d3.scaleLinear().domain([-35, 15]).range([margin.left, width - margin.right]).clamp(true);
+    const x = d3.scaleLinear().domain(calcDomain(null)).range([margin.left, width - margin.right]).nice();
     const y = d3.scaleBand().domain(placeholderRegions).range([margin.top, height - margin.bottom]).padding(0.25);
 
     const svg = container.append('svg')
@@ -694,16 +711,7 @@ function drawDivergingBarChart(){
     const label = doubleRegionAcronym(d.region);
     labelMap[label] = d.region;
   });
-  const minDelta = d3.min(data, d => d.delta) || 0;
-  const maxDelta = d3.max(data, d => d.delta) || 0;
-  const padding = (maxDelta - minDelta) * 0.1;
-  const xDomain = [minDelta - padding, maxDelta + padding];
-  if(xDomain[0] === xDomain[1]){
-    xDomain[0] -= 1;
-    xDomain[1] += 1;
-  }
-  if(xDomain[0] > 0) xDomain[0] = 0;
-  if(xDomain[1] < 0) xDomain[1] = 0;
+  const xDomain = calcDomain(data);
   const regions = data.map(d => doubleRegionAcronym(d.region));
   const rows = Math.max(regions.length, 8);
   const height = Math.max(margin.top + margin.bottom + rows * 28, 520);
