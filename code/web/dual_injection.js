@@ -152,8 +152,8 @@ function renderDoubleInterpretation(){
             <span>THE POPULATIONS</span>
           </div>
           <ul class="insight-text" style="margin:0; padding-left:18px;">
-            <li style="margin-bottom:4px;"><strong>General VGLUT1 (Blue):</strong> The "Generalist." Represents the broad output of normal excitatory neurons in the AON.</li>
-            <li><strong>Contra-Projecting (Red):</strong> The "Specialist." Represents the specific subset of neurons that project across the anterior commissure.</li>
+            <li style="margin-bottom:4px;"><strong>General VGLUT1 (Blue):</strong> Represents the broad output of normal excitatory neurons in the AON.</li>
+            <li><strong>Contra-Projecting (Red):</strong> Represents the specific subset of neurons that project across the anterior commissure.</li>
           </ul>
         </div>
       </div>
@@ -479,7 +479,7 @@ function initDoubleZoom(ref){
           .attr('x1', newX(0))
           .attr('x2', newX(0));
         ref.xAxisG
-          .call(d3.axisBottom(newX).tickValues([-30, -20, -10, 0, 10]))
+          .call(d3.axisBottom(newX).ticks(6))
           .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
           .call(g => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
       }else if(ref.type === 'scatter'){
@@ -566,7 +566,7 @@ function drawDivergingBarChart(){
 
     const xAxisG = svg.append('g')
       .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).tickValues([-30, -20, -10, 0, 10]))
+      .call(d3.axisBottom(x).ticks(6))
       .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
       .call(g => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
 
@@ -632,7 +632,7 @@ function drawDivergingBarChart(){
 
     const xAxisG = svg.append('g')
       .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).tickValues([-30, -20, -10, 0, 10]))
+      .call(d3.axisBottom(x).ticks(6))
       .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
       .call(g => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
 
@@ -675,11 +675,23 @@ function drawDivergingBarChart(){
     const label = doubleRegionAcronym(d.region);
     labelMap[label] = d.region;
   });
+  const minDelta = d3.min(data, d => d.delta) || 0;
+  const maxDelta = d3.max(data, d => d.delta) || 0;
+  const padding = (maxDelta - minDelta) * 0.1;
+  const xDomain = [minDelta - padding, maxDelta + padding];
+  if(xDomain[0] === xDomain[1]){
+    xDomain[0] -= 1;
+    xDomain[1] += 1;
+  }
+  if(xDomain[0] > 0) xDomain[0] = 0;
+  if(xDomain[1] < 0) xDomain[1] = 0;
   const regions = data.map(d => doubleRegionAcronym(d.region));
   const rows = Math.max(regions.length, 8);
   const height = Math.max(margin.top + margin.bottom + rows * 28, 520);
-  // Hardcode asymmetric domain to match Thesis Figure 1.5 F
-  const x = d3.scaleLinear().domain([-35, 15]).range([margin.left, width - margin.right]);
+  const x = d3.scaleLinear()
+    .domain(xDomain)
+    .range([margin.left, width - margin.right])
+    .nice();
   const y = d3.scaleBand().domain(regions).range([margin.top, height - margin.bottom]).padding(0.25);
 
   const svg = container.append('svg')
@@ -700,7 +712,7 @@ function drawDivergingBarChart(){
   // Axes
   const xAxisG = svg.append('g')
     .attr('transform', `translate(0,${height - margin.bottom})`)
-    .call(d3.axisBottom(x).tickValues([-30, -20, -10, 0, 10]))
+    .call(d3.axisBottom(x).ticks(6))
     .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
     .call(g => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
 
@@ -733,16 +745,9 @@ function drawDivergingBarChart(){
     .data(data)
     .enter()
     .append('rect')
-    .attr('x', d => {
-      const capped = Math.max(-35, Math.min(15, d.delta));
-      return capped >= 0 ? x(0) : x(capped);
-    })
+    .attr('x', d => d.delta >= 0 ? x(0) : x(d.delta))
     .attr('y', d => y(doubleRegionAcronym(d.region)))
-    .attr('width', d => {
-      const capped = Math.max(-35, Math.min(15, d.delta));
-      const w = Math.abs(x(capped) - x(0));
-      return Math.max(1, w);
-    })
+    .attr('width', d => Math.max(1, Math.abs(x(d.delta) - x(0))))
     .attr('height', y.bandwidth())
     .attr('fill', d => d.delta >= 0 ? diAccent1 : diAccent2) // Match rabies palette: red/orange for Contra > General, blue for General > Contra
     .attr('fill-opacity', 0.85)
