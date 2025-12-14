@@ -35,10 +35,6 @@ async function loadFiles(fileSelect, fileDetails){
           const label = labelParts.join(' • ') || f.path;
           return `<option value="${encodeURIComponent(f.path)}" data-path="${encodeURIComponent(f.path)}" data-session="${f.session_id || ''}" data-subject="${f.subject_id || ''}" data-hemisphere="${f.hemisphere || ''}">${label}</option>`;
         }).join('');
-      if(files.length && fileSelect.options.length > 1){
-        fileSelect.selectedIndex = 1;
-        renderFileDetails(fileSelect.options[fileSelect.selectedIndex], fileDetails);
-      }
     }
   }catch(err){
     console.warn('Failed to load files', err);
