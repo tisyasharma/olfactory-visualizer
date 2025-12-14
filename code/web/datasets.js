@@ -43,13 +43,10 @@ async function loadFiles(fileSelect, fileDetails){
 
 /* Render details for a selected microscopy file in the viewer dropdown. */
 function renderFileDetails(option, fileDetails){
-  if(!option || !fileDetails) return;
-  const path = decodeURIComponent(option.getAttribute('data-path') || '');
-  const sess = option.getAttribute('data-session') || '';
-  const subj = option.getAttribute('data-subject') || '';
-  const hemi = option.getAttribute('data-hemisphere') || '';
-  fileDetails.innerHTML = `<strong>Path:</strong> ${path}<br><strong>Subject:</strong> ${subj}<br><strong>Session:</strong> ${sess}<br><strong>Hemisphere:</strong> ${hemi || 'bilateral'}`;
-  fileDetails.hidden = false;
+  // Intentionally suppress details to avoid showing paths/metadata in the UI.
+  if(!fileDetails) return;
+  fileDetails.innerHTML = '';
+  fileDetails.hidden = true;
 }
 
 function attachFileHandlers(fileSelect, fileDetails, copyPathBtn, napariBtn){
