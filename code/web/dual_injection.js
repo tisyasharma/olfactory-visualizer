@@ -991,9 +991,9 @@ function drawScatterPlot(){
     .on('mouseenter', (event, d) => {
       const html = `
         <strong>${d.region}</strong><br/>
-        General: ${formatValue(d.generalMean)}<br/>
-        Contra: ${formatValue(d.contraMean)}<br/>
-        Δ: ${formatValue(d.delta)}
+        Contra-projecting strength: ${formatValue(d.contraMean)}${Number.isFinite(d.nContra) ? ` (n=${d.nContra})` : ''}<br/>
+        General VGLUT1 strength: ${formatValue(d.generalMean)}${Number.isFinite(d.nGeneral) ? ` (n=${d.nGeneral})` : ''}<br/>
+        Δ (Contra - General): ${formatValue(d.delta)}
       `;
       showDoubleTooltip(event, html);
     })
