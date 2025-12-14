@@ -1,9 +1,15 @@
-from pathlib import Path
-import sys
 import os
+import sys
+from pathlib import Path
 
-# This tells Python: "The api folder is right here, please look inside it."
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure project root and code/ are importable (Render-friendly absolute imports)
+HERE = os.path.dirname(os.path.abspath(__file__))      # .../code/api
+CODE_ROOT = os.path.dirname(HERE)                      # .../code
+PROJECT_ROOT = os.path.dirname(CODE_ROOT)              # repo root
+for p in (PROJECT_ROOT, CODE_ROOT):
+    if p and p not in sys.path:
+        sys.path.insert(0, p)
+
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -40,14 +46,3 @@ app.include_router(data_router)
 app.include_router(microscopy_router)
 app.include_router(region_counts_router)
 app.include_router(scrna_router)
-
-
-app = FastAPI()
-
-# --- YOUR API ROUTES GO HERE FIRST ---
-# (e.g., @app.get("/api/data")...)
-
-# --- STATIC FILES GO LAST ---
-# This tells FastAPI: "If the user asks for anything else (like index.html), 
-# look in the 'web' folder."
-app.mount("/", StaticFiles(directory="web", html=True), name="static")
