@@ -467,8 +467,13 @@ function initDoubleZoom(ref){
   // Start slightly zoomed out for a full-fit view
   const initialTransform = getInitialDoubleTransform(ref.svg);
   doubleZoomBehavior = d3.zoom()
-    .scaleExtent([0.7, 6])
-    .on('zoom', (event) => {
+    .scaleExtent([1, 6]);
+  if(ref.plotExtent){
+    doubleZoomBehavior
+      .extent(ref.plotExtent)
+      .translateExtent(ref.plotExtent);
+  }
+  doubleZoomBehavior.on('zoom', (event) => {
       doubleZoomTransform = event.transform;
       if(ref.type === 'diverging'){
         const newX = event.transform.rescaleX(ref.x0);
@@ -809,19 +814,34 @@ function drawScatterPlot(){
         .style('height','auto')
         .style('border','1px solid #e5e7eb')
         .style('border-radius','8px');
-      svg.append('g')
+      const clipId = `scatter-clip-${Math.random().toString(36).slice(2, 8)}`;
+      const clipPad = 8;
+      const clipX = margin.left - clipPad;
+      const clipY = margin.top - clipPad;
+      const clipW = width - margin.left - margin.right + clipPad * 2;
+      const clipH = height - margin.top - margin.bottom + clipPad * 2;
+      svg.append('defs')
+        .append('clipPath')
+        .attr('id', clipId)
+        .append('rect')
+        .attr('x', clipX)
+        .attr('y', clipY)
+        .attr('width', clipW)
+        .attr('height', clipH);
+      const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
+      const xAxisG = svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
         .call(d3.axisBottom(x).ticks(4))
         .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
         .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
         .call(g => g.selectAll('line').attr('stroke', '#e5e7eb'));
-      svg.append('g')
+      const yAxisG = svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
         .call(d3.axisLeft(y).ticks(4))
         .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
         .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
         .call(g => g.selectAll('line').attr('stroke', '#e5e7eb'));
-      svg.append('line')
+      const identityLine = plotArea.append('line')
         .attr('x1', x(0)).attr('y1', y(0))
         .attr('x2', x(1)).attr('y2', y(1))
         .attr('stroke', diAccent2)
@@ -842,17 +862,21 @@ function drawScatterPlot(){
         .attr('font-size', 12.5)
         .text('Contra-Projecting strength');
       renderDoubleLegend(svg, width, margin);
+      const xGridG = plotArea.append('g');
+      const yGridG = plotArea.append('g');
+      const points = plotArea.append('g');
       initDoubleZoom({
         type: 'scatter',
         svg,
         x0: x,
         y0: y,
-        points: svg.append('g'),
-        identityLine: svg.append('line').attr('x1', x(0)).attr('y1', y(0)).attr('x2', x(1)).attr('y2', y(1)),
-        xAxisG: svg.append('g'),
-        yAxisG: svg.append('g'),
-        xGrid: svg.append('g'),
-        yGrid: svg.append('g'),
+        plotExtent: [[margin.left, margin.top], [width - margin.right, height - margin.bottom]],
+        points,
+        identityLine,
+        xAxisG,
+        yAxisG,
+        xGrid: xGridG,
+        yGrid: yGridG,
         xGridGen: d3.axisBottom(x).ticks(4).tickSize(-(height - margin.top - margin.bottom)).tickFormat(() => ''),
         yGridGen: d3.axisLeft(y).ticks(4).tickSize(-(width - margin.left - margin.right)).tickFormat(() => ''),
         upper: 1
@@ -882,17 +906,32 @@ function drawScatterPlot(){
     .attr('preserveAspectRatio','xMidYMid meet')
     .style('width','100%')
     .style('height','auto');
+  const clipId = `scatter-clip-${Math.random().toString(36).slice(2, 8)}`;
+  const clipPad = 8;
+  const clipX = margin.left - clipPad;
+  const clipY = margin.top - clipPad;
+  const clipW = width - margin.left - margin.right + clipPad * 2;
+  const clipH = height - margin.top - margin.bottom + clipPad * 2;
+  svg.append('defs')
+    .append('clipPath')
+    .attr('id', clipId)
+    .append('rect')
+    .attr('x', clipX)
+    .attr('y', clipY)
+    .attr('width', clipW)
+    .attr('height', clipH);
+  const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
 
   // Grid
   const xGrid = d3.axisBottom(x).ticks(6).tickSize(-(height - margin.top - margin.bottom)).tickFormat(() => '');
-  const xGridG = svg.append('g')
+  const xGridG = plotArea.append('g')
     .attr('transform', `translate(0,${height - margin.bottom})`)
     .call(xGrid)
     .call(g => g.selectAll('line').attr('stroke','#eef2f7').attr('stroke-width',1))
     .call(g => g.selectAll('.domain, text').remove());
     
   const yGrid = d3.axisLeft(y).ticks(6).tickSize(-(width - margin.left - margin.right)).tickFormat(() => '');
-  const yGridG = svg.append('g')
+  const yGridG = plotArea.append('g')
     .attr('transform', `translate(${margin.left},0)`)
     .call(yGrid)
     .call(g => g.selectAll('line').attr('stroke','#eef2f7').attr('stroke-width',1))
@@ -914,7 +953,7 @@ function drawScatterPlot(){
     .call(g => g.selectAll('line').attr('stroke', '#e5e7eb'));
 
   // Identity line
-  const identityLine = svg.append('line')
+  const identityLine = plotArea.append('line')
     .attr('x1', x(0)).attr('y1', y(0))
     .attr('x2', x(upper)).attr('y2', y(upper))
     .attr('stroke', diAccent2)
@@ -923,7 +962,7 @@ function drawScatterPlot(){
     .attr('opacity', 0.5);
 
   // Points
-  const points = svg.append('g')
+  const points = plotArea.append('g')
     .selectAll('circle')
     .data(agg)
     .enter()
@@ -932,7 +971,7 @@ function drawScatterPlot(){
     .attr('cy', d => y(d.contraMean))
     .attr('r', 6)
     .attr('fill', d => d.delta >= 0 ? diAccent1 : diAccent2) // Match rabies colors: red/orange for Contra>General, blue for General-dominant
-    .attr('fill-opacity', 0.9)
+    .attr('fill-opacity', 0.6)
     .attr('stroke', '#fff')
     .attr('stroke-width', 1)
     .on('mouseenter', (event, d) => {
@@ -968,6 +1007,7 @@ function drawScatterPlot(){
     svg,
     x0: x,
     y0: y,
+    plotExtent: [[margin.left, margin.top], [width - margin.right, height - margin.bottom]],
     points,
     identityLine,
     xAxisG,
