@@ -825,17 +825,15 @@ function drawScatterPlot(){
       const panelWidth = containerNode?.closest('.figure-panel')?.getBoundingClientRect?.().width || 0;
       const computedWidth = Math.max(rect?.width || 0, parentWidth || 0, panelWidth || 0);
       const width = Math.max(computedWidth, 900);
-      const height = 440;
       const margin = { top: 80, right: 32, bottom: 52, left: 72 };
+      const height = margin.top + margin.bottom + 420;
       const x = d3.scaleLinear().domain([0, 1]).range([margin.left, width - margin.right]);
       const y = d3.scaleLinear().domain([0, 1]).range([height - margin.bottom, margin.top]);
       const svg = container.append('svg')
         .attr('viewBox', `0 0 ${width} ${height}`)
         .attr('preserveAspectRatio','xMidYMid meet')
         .style('width','100%')
-        .style('height','auto')
-        .style('border','1px solid #e5e7eb')
-        .style('border-radius','8px');
+        .style('height','auto');
       const clipId = `scatter-clip-${Math.random().toString(36).slice(2, 8)}`;
       const clipPad = 8;
       const clipX = margin.left - clipPad;
@@ -851,15 +849,27 @@ function drawScatterPlot(){
         .attr('width', clipW)
         .attr('height', clipH);
       const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
+      const xGrid = d3.axisBottom(x).ticks(6).tickSize(-(height - margin.top - margin.bottom)).tickFormat(() => '');
+      const xGridG = plotArea.append('g')
+        .attr('transform', `translate(0,${height - margin.bottom})`)
+        .call(xGrid)
+        .call(g => g.selectAll('line').attr('stroke','#eef2f7').attr('stroke-width',1))
+        .call(g => g.selectAll('.domain, text').remove());
+      const yGrid = d3.axisLeft(y).ticks(6).tickSize(-(width - margin.left - margin.right)).tickFormat(() => '');
+      const yGridG = plotArea.append('g')
+        .attr('transform', `translate(${margin.left},0)`)
+        .call(yGrid)
+        .call(g => g.selectAll('line').attr('stroke','#eef2f7').attr('stroke-width',1))
+        .call(g => g.selectAll('.domain, text').remove());
       const xAxisG = svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x).ticks(4))
+        .call(d3.axisBottom(x).ticks(6))
         .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
         .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
         .call(g => g.selectAll('line').attr('stroke', '#e5e7eb'));
       const yAxisG = svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y).ticks(4))
+        .call(d3.axisLeft(y).ticks(6))
         .call(g => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
         .call(g => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
         .call(g => g.selectAll('line').attr('stroke', '#e5e7eb'));
@@ -884,8 +894,6 @@ function drawScatterPlot(){
         .attr('font-size', 12.5)
         .text('Contra-Projecting strength');
       renderDoubleLegend(svg, width, margin);
-      const xGridG = plotArea.append('g');
-      const yGridG = plotArea.append('g');
       const points = plotArea.append('g');
       initDoubleZoom({
         type: 'scatter',
@@ -899,8 +907,8 @@ function drawScatterPlot(){
         yAxisG,
         xGrid: xGridG,
         yGrid: yGridG,
-        xGridGen: d3.axisBottom(x).ticks(4).tickSize(-(height - margin.top - margin.bottom)).tickFormat(() => ''),
-        yGridGen: d3.axisLeft(y).ticks(4).tickSize(-(width - margin.left - margin.right)).tickFormat(() => ''),
+        xGridGen: xGrid,
+        yGridGen: yGrid,
         upper: 1
       });
       return;
