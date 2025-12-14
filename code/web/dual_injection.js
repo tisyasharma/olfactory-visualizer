@@ -78,7 +78,21 @@ function activeSelection(){
 
 function setDefaultDoubleSelection(regions){
   ensureDoubleSelections();
-  const available = Array.isArray(regions) ? regions : [];
+  let available = Array.isArray(regions) ? regions : [];
+  if(doubleState.view === 'scatter'){
+    const plottable = new Set(
+      aggregateDoubleData(null)
+        .filter(d => Number.isFinite(d.generalMean) && Number.isFinite(d.contraMean))
+        .filter(d => {
+          const name = (d.region || '').toLowerCase();
+          const isInjectionSite = name.includes('anterior olfactory nucleus') || name.includes('aon');
+          const nearZero = Math.abs(d.generalMean) < 1e-6 && Math.abs(d.contraMean) < 1e-6;
+          return !isInjectionSite && !nearZero;
+        })
+        .map(d => d.region)
+    );
+    available = available.filter(r => plottable.has(r));
+  }
   const clean = (s='') => s.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const matchDefaultDiverging = () => {
     const matched = [];
@@ -786,7 +800,7 @@ function drawScatterPlot(){
   
   const selection = activeSelection();
   const emptyState = doubleState.forceEmptyPlot || selection.size === 0;
-  let agg = emptyState ? [] : aggregateDoubleData(null)
+  let agg = emptyState ? [] : aggregateDoubleData(selection)
     .filter(d => Number.isFinite(d.generalMean) && Number.isFinite(d.contraMean))
     .filter(d => {
       const name = (d.region || '').toLowerCase();
@@ -1059,13 +1073,32 @@ function renderDoubleRegionList(){
   if(!listEl) return;
   
   const selectedSet = activeSelection();
+  let regionSource = doubleState.regions;
+  if(doubleState.view === 'scatter'){
+    const plottable = new Set(
+      aggregateDoubleData(null)
+        .filter(d => Number.isFinite(d.generalMean) && Number.isFinite(d.contraMean))
+        .filter(d => {
+          const name = (d.region || '').toLowerCase();
+          const isInjectionSite = name.includes('anterior olfactory nucleus') || name.includes('aon');
+          const nearZero = Math.abs(d.generalMean) < 1e-6 && Math.abs(d.contraMean) < 1e-6;
+          return !isInjectionSite && !nearZero;
+        })
+        .map(d => d.region)
+    );
+    regionSource = regionSource.filter(r => plottable.has(r));
+    Array.from(selectedSet).forEach(r => {
+      if(!plottable.has(r)) selectedSet.delete(r);
+    });
+    doubleState.forceEmptyPlot = selectedSet.size === 0;
+  }
   // Highlight regions that have non-zero signal in the loaded dataset
   const signalRegions = new Set(
     doubleState.data
       .filter(d => Number.isFinite(d.value) && d.value > 0)
       .map(d => d.region)
   );
-  const filtered = doubleState.regions.filter(r => r.toLowerCase().includes(doubleState.search));
+  const filtered = regionSource.filter(r => r.toLowerCase().includes(doubleState.search));
   listEl.innerHTML = '';
   
   filtered.forEach(region => {
@@ -1142,6 +1175,9 @@ function attachDoubleHandlers(){
         b.classList.toggle('is-active', active);
         b.setAttribute('aria-pressed', String(active));
       });
+      const activeSel = activeSelection();
+      doubleState.forceEmptyPlot = activeSel.size === 0;
+      renderDoubleRegionList();
       updateDoubleZoomLevel();
       renderDoublePlots();
     });
@@ -1185,30 +1221,26 @@ async function loadDoubleData(){
       if(Array.isArray(regionTree)){
         const map = {};
         regionTree.forEach(r => {
-          if(r.name && r.acronym){
-            map[r.name] = r.acronym;
-          }
-        });
-        doubleState.regionNameToAcronym = map;
+      if(r.name && r.acronym){
+        map[r.name] = r.acronym;
       }
-    }catch(err){
-      console.warn('Double injection: region tree load failed', err);
-    }
-    
-    const regionNames = Array.from(new Set(normalized.map(r => r.region))).sort();
-    doubleState.regions = regionNames;
+    });
+    doubleState.regionNameToAcronym = map;
+  }
+}catch(err){
+  console.warn('Double injection: region tree load failed', err);
+}
 
-    if(!doubleState.hasCustomSelection){
-      // Sort by delta strength to show interesting regions first
-      const agg = aggregateDoubleData(null)
-        .sort((a,b) => Math.abs(b.delta) - Math.abs(a.delta));
-      const defaults = agg.map(a => a.region).slice(0, 15);
-      setDefaultDoubleSelection(doubleState.regions);
-    }
-    
-    renderDoubleRegionList();
-    renderDoublePlots();
-    
+const regionNames = Array.from(new Set(normalized.map(r => r.region))).sort();
+doubleState.regions = regionNames;
+
+if(!doubleState.hasCustomSelection){
+  setDefaultDoubleSelection(doubleState.regions);
+}
+
+renderDoubleRegionList();
+renderDoublePlots();
+
   } catch(err){
     console.warn('Double injection data load failed', err);
     doubleState.data = [];
