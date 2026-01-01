@@ -1,0 +1,58 @@
+{
+  "Main olfactory bulb": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "++" }
+  },
+  "Nucleus of the lateral olfactory tract, layer 3": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "-" }
+  },
+  "Nucleus of the lateral olfactory tract, molecular layer": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "++", "Contra": "-" }
+  },
+  "Nucleus of the lateral olfactory tract, pyramidal layer": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "-" }
+  },
+  "Olfactory tubercle": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+" }
+  },
+  "Piriform area": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+" }
+  },
+  "Piriform-amygdalar area": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+" }
+  },
+  "Anterior commissure, olfactory limb": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+++" }
+  },
+  "Lateral olfactory tract, body": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+++" }
+  },
+  "Anterior amygdalar area": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "-" }
+  },
+  "Anterior olfactory nucleus": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+++" }
+  },
+  "Bed nucleus of the accessory olfactory tract": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "-", "Contra": "-" }
+  },
+  "Endopiriform nucleus, dorsal part": {
+    "VGAT": { "Ipsi": "+++", "Contra": "+++" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+" }
+  },
+  "Endopiriform nucleus, ventral part": {
+    "VGAT": { "Ipsi": "+++", "Contra": "-" },
+    "VGLUT1": { "Ipsi": "+++", "Contra": "+" }
+  }
+}

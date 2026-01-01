@@ -24,3 +24,6 @@ database/processed_zarr/
 *.tif
 *.ome.zarr
 *.zarr
+
+# --- Node ---
+node_modules/

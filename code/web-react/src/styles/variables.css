@@ -1,0 +1,15 @@
+/* CSS Custom Properties */
+
+:root {
+  /* Accent colors */
+  --accent1: #e71419; /* Rabies tracing - red */
+  --accent2: #5471a9; /* Dual injection - blue */
+  --accent3: #22c55e; /* scRNA - green */
+
+  /* Base colors */
+  --ink: #111827;
+  --muted: #6b7280;
+  --paper: #ffffff;
+  --paper-alt: #f7f8fb;
+  --border: #e5e7eb;
+}
