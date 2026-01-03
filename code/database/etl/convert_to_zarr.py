@@ -14,7 +14,6 @@ except ImportError:
 
 from code.database.etl.subject_map import SUBJECT_MAP
 
-# --- PATH CONFIGURATION ---
 SOURCE_ROOT = os.path.join("data", "sourcedata", "images")
 BIDS_ROOT = os.path.join("data", "raw_bids")
 

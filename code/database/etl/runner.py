@@ -66,7 +66,7 @@ def run_etl():
     print(f"Reading data from: {DATA_ROOT}")
 
     # Step 1: subjects/sessions from config
-    print("\n--- Step 1: Loading Subjects ---")
+    print("\nStep 1: Loading Subjects")
     with engine.begin() as conn:
         allowed_subjects = {meta["subject"] for meta in SUBJECT_MAP.values()}
         subjects.cleanup_unknown_subjects(conn, allowed_subjects, stats)
@@ -79,14 +79,14 @@ def run_etl():
     seed_batch_hashes(engine, allowed_subjects, stats)
 
     # Step 2: BIDS imaging files
-    print("\n--- Step 2: Registering imaging files (BIDS) ---")
+    print("\nStep 2: Registering imaging files (BIDS)")
     print(f"BIDS root: {BIDS_ROOT}")
     bids.load_bids_files(engine, stats, allowed_subjects=allowed_subjects)
     file_map = bids.build_file_map(engine)
     bids.backfill_ingest_log(engine, stats)
 
     # Step 3: Atlas
-    print("\n--- Step 3: Loading Allen Atlas Regions ---")
+    print("\nStep 3: Loading Allen Atlas Regions")
     load_atlas(engine)
     atlas_map = {}
     with engine.connect() as conn:
@@ -95,7 +95,7 @@ def run_etl():
         unit_map = {r._mapping["name"]: r._mapping["unit_id"] for r in conn.execute(text("SELECT unit_id, name FROM units"))}
 
     # Step 4: Quantification CSVs
-    print("\n--- Step 4: Processing Quantification Files ---")
+    print("\nStep 4: Processing Quantification Files")
     count_rows, session_rows_from_counts, extra_regions = counts.ingest_counts(engine, unit_map, atlas_map, file_map, stats)
     counts.insert_counts(engine, count_rows, session_rows_from_counts, extra_regions)
 
@@ -105,7 +105,7 @@ def run_etl():
                      {"p": str(DATA_ROOT), "s": "success", "m": "ETL complete"})
 
     print("\nETL Complete. Database hydrated.")
-    print("\n--- Summary ---")
+    print("\nSummary:")
     print(summarize(stats))
 
 

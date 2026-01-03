@@ -1,7 +1,7 @@
 """Maps raw folder names to BIDS-compliant subject metadata."""
 
 SUBJECT_MAP = {
-    # --- Double Injection Mice (DBL) ---
+    # Double Injection Mice (DBL)
     "DBL_A": {
         "subject": "sub-dbl01",
         "session": "ses-01",
@@ -27,7 +27,7 @@ SUBJECT_MAP = {
         "details": "Double Injection"
     },
 
-    # --- Rabies Mice ---
+    # Rabies Mice
     "RabiesA_Vglut1": {
         "subject": "sub-rab01",
         "session": "ses-01",
