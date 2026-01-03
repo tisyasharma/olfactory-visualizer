@@ -1,6 +1,6 @@
 """
 Lightweight stats accumulator.
-Reason: track inserts/skips across stages and emit a summary.
+Reason: track inserts/skips across stages and provides a summary.
 """
 
 def bump(stats: dict, key: str, inc: int = 1):

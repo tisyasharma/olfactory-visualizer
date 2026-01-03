@@ -1,6 +1,6 @@
 """
 Subject/session seeding stage.
-Reason: seed subjects and one microscopy session per subject from subject_map; reusable in pipeline.
+Reason: seed subjects and one microscopy session per subject from subject_map, reusable in pipeline.
 """
 from sqlalchemy import text
 import pandas as pd

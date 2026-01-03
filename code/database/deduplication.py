@@ -53,16 +53,6 @@ def check_microscopy_duplicate(
     overlap_threshold: float = OVERLAP_THRESHOLD
 ):
     """
-    Parameters:
-        engine: SQLAlchemy engine/connection.
-        batch_checksum (str): Combined hash of the upload batch.
-        file_hashes (list[str]): Individual file SHA256 hashes.
-        overlap_threshold (float): Fraction of overlap to consider a duplicate.
-
-    Returns:
-        str | None: Reason string when duplicate detected; None otherwise.
-
-    Does:
         Checks ingest_log, existing batches, per-file hashes, exact set matches,
         and strong overlap to flag duplicates.
     """
