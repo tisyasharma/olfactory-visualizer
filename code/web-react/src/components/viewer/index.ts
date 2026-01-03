@@ -1,0 +1,2 @@
+export { OmeZarrSliceViewer } from './OmeZarrSliceViewer';
+
