@@ -62,6 +62,23 @@ export const filesAPI = {
     fetchJson<MicroscopyFile[]>(buildUrl(`${API_BASE}/files`, params as Record<string, string>)),
 };
 
+// Microscopy Stacks API
+export interface MicroscopyStack {
+  id: string;
+  file_id: number;
+  subject_id: string;
+  session_id: string;
+  run: number;
+  hemisphere: string | null;
+  name: string;
+  url: string;
+  path: string;
+}
+
+export const microscopyStacksAPI = {
+  list: () => fetchJson<MicroscopyStack[]>(`${API_BASE}/microscopy-stacks`),
+};
+
 // scRNA API
 export const scRNAAPI = {
   samples: () => fetchJson<ScRNASample[]>(`${API_BASE}/scrna/samples`),

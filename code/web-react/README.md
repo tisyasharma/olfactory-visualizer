@@ -1,73 +1,63 @@
-# React + TypeScript + Vite
+# Olfactory Data Visualizer - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript frontend for the Olfactory Data Visualizer dashboard.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **React 19** with TypeScript
+- **Vite** for build tooling and dev server
+- **D3.js** for data visualizations
+- **React Router** for navigation
+- **@hms-dbmi/viv** for OME-Zarr microscopy viewer
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# Install dependencies
+npm install
 
-## Expanding the ESLint configuration
+# Start dev server (runs on http://localhost:5173 by default)
+npm run dev
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Build for production
+npm run build
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Preview production build
+npm run preview
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Key Dependencies
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **@hms-dbmi/viv** (^0.15.0): OME-Zarr microscopy viewer
+  - Used by `src/pages/Napari.tsx` (Microscopy Viewer)
+  - Implementation: `src/components/viewer/OmeZarrSliceViewer.tsx`
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- **d3** (^7.9.0): Data visualizations
+  - Scatter plots, bar charts, dot plots
+  - Zoom/pan interactions
+
+## Project Structure
+
 ```
+src/
+├── api/              # API client and endpoints
+├── components/       # React components
+│   ├── controls/     # UI controls (selectors, zoom, etc.)
+│   ├── layout/       # Layout components (sidebar, navigation)
+│   ├── shared/       # Shared components (tooltip, spinner)
+│   ├── viewer/       # OME-Zarr microscopy viewer
+│   └── visualizations/ # D3.js charts
+├── pages/            # Route pages
+├── hooks/            # Custom React hooks
+├── types/            # TypeScript type definitions
+└── utils/            # Utility functions
+```
+
+## API Integration
+
+The frontend connects to the FastAPI backend at `/api/v1`. See `src/api/` for endpoint definitions and client utilities.
+
+## See Also
+
+- Main project README: `../../README.md`
+- Backend API: `../../api/`

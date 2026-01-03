@@ -37,8 +37,8 @@ export function useRegionSelection(
         setSelectedRegions(new Set(parsed));
         setHasCustomSelection(true);
       }
-    } catch (err) {
-      console.warn('Failed to load region selection from localStorage:', err);
+    } catch {
+      // localStorage may be unavailable or corrupted
     }
   }, [storageKey]);
 
@@ -48,8 +48,8 @@ export function useRegionSelection(
 
     try {
       localStorage.setItem(storageKey, JSON.stringify([...selectedRegions]));
-    } catch (err) {
-      console.warn('Failed to save region selection to localStorage:', err);
+    } catch {
+      // localStorage may be unavailable
     }
   }, [selectedRegions, storageKey]);
 

@@ -75,11 +75,10 @@ export interface AggregatedRabiesData {
 }
 
 /**
- * Aggregate rabies tracing data
+ * Aggregate rabies tracing data by genotype and hemisphere.
  */
 export function aggregateRabiesData(
-  data: RegionLoadByMouse[],
-  _groupBy: 'genotype' | 'subject' = 'genotype'
+  data: RegionLoadByMouse[]
 ): AggregatedRabiesData[] {
   const grouped = new Map<string, { values: number[]; genotype: 'Vglut1' | 'Vgat'; hemisphere: 'left' | 'right' }>();
 

@@ -20,6 +20,7 @@ export function DivergingBarChart({
   onTooltipHide,
 }: DivergingBarChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -66,10 +67,9 @@ export function DivergingBarChart({
     const xDomain = calcDomain(aggregated);
     const regions = aggregated.map((d) => getAcronym(d.region));
 
-    // Scales
-    const x = d3.scaleLinear().domain(xDomain).range([margin.left, width - margin.right]).nice();
-
-    const y = d3.scaleBand().domain(regions).range([margin.top, height - margin.bottom]).padding(0.25);
+    // Scales (store original for zoom)
+    const x0 = d3.scaleLinear().domain(xDomain).range([margin.left, width - margin.right]).nice();
+    const y0 = d3.scaleBand().domain(regions).range([margin.top, height - margin.bottom]).padding(0.25);
 
     // Create SVG
     const svg = d3
@@ -80,31 +80,39 @@ export function DivergingBarChart({
       .style('width', '100%')
       .style('height', 'auto');
 
-    // Zero line
-    svg
+    // Zero line (will be updated on zoom)
+    const zeroLine = svg
       .append('line')
-      .attr('x1', x(0))
-      .attr('x2', x(0))
+      .attr('x1', x0(0))
+      .attr('x2', x0(0))
       .attr('y1', margin.top - 6)
       .attr('y2', height - margin.bottom)
       .attr('stroke', '#cbd5e1')
       .attr('stroke-width', 1.5);
 
-    // X axis
-    svg
+    // X axis (will be updated on zoom)
+    const xAxisG = svg
       .append('g')
-      .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).ticks(6))
-      .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
-      .call((g) => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
+      .attr('class', 'x-axis')
+      .attr('transform', `translate(0,${height - margin.bottom})`);
 
-    // Y axis
+    // Y axis (static, doesn't need zoom)
     svg
       .append('g')
       .attr('transform', `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y).tickSizeOuter(0))
+      .call(d3.axisLeft(y0).tickSizeOuter(0))
       .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937').attr('cursor', 'default'))
       .call((g) => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
+
+    function updateAxes(xScale: d3.ScaleLinear<number, number>) {
+      xAxisG
+        .call(d3.axisBottom(xScale).ticks(6))
+        .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
+        .call((g) => g.selectAll('.domain, line').attr('stroke', '#cbd5e1'));
+      zeroLine.attr('x1', xScale(0)).attr('x2', xScale(0));
+    }
+
+    updateAxes(x0);
 
     // Axis labels
     svg
@@ -185,48 +193,84 @@ export function DivergingBarChart({
       lx += swatchSize + 8 + textWidth + itemGap;
     });
 
-    // Draw bars
-    aggregated.forEach((d) => {
-      const acronym = getAcronym(d.region);
-      const yPos = y(acronym);
-      if (yPos === undefined) return;
+    // Draw bars (store references for zoom updates)
+    const bars = svg
+      .selectAll('rect.bar')
+      .data(aggregated)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('fill', (d) => (d.delta >= 0 ? COLORS.accent1 : COLORS.accent2))
+      .attr('fill-opacity', 0.7)
+      .attr('stroke', (d) => (d.delta >= 0 ? COLORS.accent1 : COLORS.accent2))
+      .attr('stroke-width', 1.2)
+      .attr('rx', 2)
+      .style('cursor', 'pointer')
+      .on('mouseover', function (event: MouseEvent, d) {
+        d3.select(this).attr('fill-opacity', 0.9);
 
-      const barHeight = y.bandwidth();
-      const delta = d.delta;
-      const color = delta >= 0 ? COLORS.accent1 : COLORS.accent2;
+        const tooltipContent = `
+          <strong>${d.region}</strong><br/>
+          <span style="color:${COLORS.accent2}">VGLUT1 Mean:</span> ${formatValue(d.generalMean)}%<br/>
+          <span style="color:${COLORS.accent1}">Contra Mean:</span> ${formatValue(d.contraMean)}%<br/>
+          <strong>Δ (Contra - VGLUT1):</strong> ${formatValue(d.delta)}%
+        `;
+        onTooltipShow(event, tooltipContent);
+      })
+      .on('mouseout', function () {
+        d3.select(this).attr('fill-opacity', 0.7);
+        onTooltipHide();
+      });
 
-      const barX = delta >= 0 ? x(0) : x(delta);
-      const barWidth = Math.abs(x(delta) - x(0));
+    function updateBars(xScale: d3.ScaleLinear<number, number>) {
+      bars.each(function (d) {
+        const acronym = getAcronym(d.region);
+        const yPos = y0(acronym);
+        if (yPos === undefined) return;
 
-      svg
-        .append('rect')
-        .attr('x', barX)
-        .attr('y', yPos)
-        .attr('width', barWidth)
-        .attr('height', barHeight)
-        .attr('fill', color)
-        .attr('fill-opacity', 0.7)
-        .attr('stroke', color)
-        .attr('stroke-width', 1.2)
-        .attr('rx', 2)
-        .style('cursor', 'pointer')
-        .on('mouseover', function (event: MouseEvent) {
-          d3.select(this).attr('fill-opacity', 0.9);
+        const barHeight = y0.bandwidth();
+        const delta = d.delta;
+        const barX = delta >= 0 ? xScale(0) : xScale(delta);
+        const barWidth = Math.abs(xScale(delta) - xScale(0));
 
-          const tooltipContent = `
-            <strong>${d.region}</strong><br/>
-            <span style="color:${COLORS.accent2}">VGLUT1 Mean:</span> ${formatValue(d.generalMean)}%<br/>
-            <span style="color:${COLORS.accent1}">Contra Mean:</span> ${formatValue(d.contraMean)}%<br/>
-            <strong>Δ (Contra - VGLUT1):</strong> ${formatValue(delta)}%
-          `;
-          onTooltipShow(event, tooltipContent);
-        })
-        .on('mouseout', function () {
-          d3.select(this).attr('fill-opacity', 0.7);
-          onTooltipHide();
-        });
-    });
-  }, [data, selectedRegions, regionNameToAcronym, onTooltipShow, onTooltipHide]);
+        d3.select(this)
+          .attr('x', barX)
+          .attr('y', yPos)
+          .attr('width', barWidth)
+          .attr('height', barHeight);
+      });
+    }
+
+    updateBars(x0);
+
+    // Add zoom behavior
+    const plotExtent: [[number, number], [number, number]] = [
+      [margin.left, margin.top],
+      [width - margin.right, height - margin.bottom],
+    ];
+
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([1, 6])
+      .extent(plotExtent)
+      .translateExtent(plotExtent)
+      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+        const transform = event.transform;
+        zoomTransformRef.current = transform; // Store transform
+        const x = transform.rescaleX(x0);
+
+        updateBars(x);
+        updateAxes(x);
+      });
+
+    svg.call(zoom);
+    
+    // Restore previous zoom state if it exists
+    const savedTransform = zoomTransformRef.current;
+    if (savedTransform && savedTransform.k !== 1) {
+      svg.transition().duration(0).call(zoom.transform, savedTransform);
+    }
+  }, [data, selectedRegions, regionNameToAcronym]); // Remove tooltip callbacks from deps
 
   return <div ref={containerRef} className="dotplot-container" style={{ width: '100%', height: '100%' }} />;
 }

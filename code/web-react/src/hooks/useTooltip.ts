@@ -22,31 +22,34 @@ export function useTooltip(): UseTooltipReturn {
   });
 
   const showTooltip = useCallback(
-    (event: MouseEvent, content: string, containerRef?: RefObject<HTMLElement>) => {
-      const container = containerRef?.current || document.body;
-      const containerRect = container.getBoundingClientRect();
-
+    (event: MouseEvent, content: string, _containerRef?: RefObject<HTMLElement>) => {
       // Tooltip dimensions (approximate)
       const tooltipWidth = 250;
       const tooltipHeight = 100;
       const offset = 12;
 
-      // Calculate desired position
-      let desiredLeft = event.clientX - containerRect.left + offset;
-      let desiredTop = event.clientY - containerRect.top + offset;
+      // Get mouse position relative to viewport
+      let x = event.clientX + offset;
+      let y = event.clientY + offset;
 
-      // Boundary clamping
-      const maxLeft = containerRect.width - tooltipWidth - 16;
-      const maxTop = containerRect.height - tooltipHeight - 16;
+      // Keep tooltip within viewport bounds
+      if (x + tooltipWidth > window.innerWidth) {
+        x = event.clientX - tooltipWidth - offset;
+      }
 
-      const clampedLeft = Math.max(0, Math.min(desiredLeft, maxLeft));
-      const clampedTop = Math.max(0, Math.min(desiredTop, maxTop));
+      if (y + tooltipHeight > window.innerHeight) {
+        y = event.clientY - tooltipHeight - offset;
+      }
+
+      // Ensure tooltip doesn't go off left or top edge
+      x = Math.max(offset, x);
+      y = Math.max(offset, y);
 
       setTooltipState({
         content,
         visible: true,
-        x: clampedLeft,
-        y: clampedTop,
+        x,
+        y,
       });
     },
     []

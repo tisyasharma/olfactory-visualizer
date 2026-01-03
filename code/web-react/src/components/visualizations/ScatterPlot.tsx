@@ -13,6 +13,8 @@ interface ScatterPlotProps {
 
 export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHide }: ScatterPlotProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const zoomTransformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -59,9 +61,9 @@ export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHid
 
     const upper = 120;
 
-    // Scales
-    const x = d3.scaleLinear().domain([0, upper]).range([margin.left, width - margin.right]);
-    const y = d3.scaleLinear().domain([0, upper]).range([height - margin.bottom, margin.top]);
+    // Scales (store original for zoom)
+    const x0 = d3.scaleLinear().domain([0, upper]).range([margin.left, width - margin.right]);
+    const y0 = d3.scaleLinear().domain([0, upper]).range([height - margin.bottom, margin.top]);
 
     // Create SVG
     const svg = d3
@@ -71,6 +73,9 @@ export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHid
       .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('width', '100%')
       .style('height', 'auto');
+
+    // Store ref for zoom
+    svgRef.current = svg.node();
 
     // Clip path
     const clipId = `scatter-clip-${Math.random().toString(36).slice(2, 8)}`;
@@ -87,70 +92,79 @@ export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHid
 
     const plotArea = svg.append('g').attr('clip-path', `url(#${clipId})`);
 
-    // Grid
-    const xGrid = d3
-      .axisBottom(x)
-      .ticks(6)
-      .tickSize(-(height - margin.top - margin.bottom))
-      .tickFormat(() => '');
-
-    plotArea
+    // Grid (will be updated on zoom)
+    const xGrid = plotArea
       .append('g')
-      .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(xGrid)
-      .call((g) => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-      .call((g) => g.selectAll('.domain, text').remove());
+      .attr('class', 'x-grid')
+      .attr('transform', `translate(0,${height - margin.bottom})`);
 
-    const yGrid = d3
-      .axisLeft(y)
-      .ticks(6)
-      .tickSize(-(width - margin.left - margin.right))
-      .tickFormat(() => '');
-
-    plotArea
+    const yGrid = plotArea
       .append('g')
-      .attr('transform', `translate(${margin.left},0)`)
-      .call(yGrid)
-      .call((g) => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
-      .call((g) => g.selectAll('.domain, text').remove());
+      .attr('class', 'y-grid')
+      .attr('transform', `translate(${margin.left},0)`);
 
-    // Axes
-    svg
+    function updateGrid(xScale: d3.ScaleLinear<number, number>, yScale: d3.ScaleLinear<number, number>) {
+      xGrid
+        .call(
+          d3
+            .axisBottom(xScale)
+            .ticks(6)
+            .tickSize(-(height - margin.top - margin.bottom))
+            .tickFormat(() => '')
+        )
+        .call((g) => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
+        .call((g) => g.selectAll('.domain, text').remove());
+
+      yGrid
+        .call(
+          d3
+            .axisLeft(yScale)
+            .ticks(6)
+            .tickSize(-(width - margin.left - margin.right))
+            .tickFormat(() => '')
+        )
+        .call((g) => g.selectAll('line').attr('stroke', '#eef2f7').attr('stroke-width', 1))
+        .call((g) => g.selectAll('.domain, text').remove());
+    }
+
+    updateGrid(x0, y0);
+
+    // Axes (with classes for zoom updates)
+    const xAxisG = svg
       .append('g')
-      .attr('transform', `translate(0,${height - margin.bottom})`)
-      .call(d3.axisBottom(x).ticks(6))
-      .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
-      .call((g) => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
-      .call((g) => g.selectAll('line').attr('stroke', '#e5e7eb'));
+      .attr('class', 'x-axis')
+      .attr('transform', `translate(0,${height - margin.bottom})`);
 
-    svg
+    const yAxisG = svg
       .append('g')
-      .attr('transform', `translate(${margin.left},0)`)
-      .call(d3.axisLeft(y).ticks(6))
-      .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
-      .call((g) => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
-      .call((g) => g.selectAll('line').attr('stroke', '#e5e7eb'));
+      .attr('class', 'y-axis')
+      .attr('transform', `translate(${margin.left},0)`);
 
-    // Identity line
-    plotArea
-      .append('line')
-      .attr('x1', x(0))
-      .attr('y1', y(0))
-      .attr('x2', x(upper))
-      .attr('y2', y(upper))
-      .attr('stroke', COLORS.accent2)
-      .attr('stroke-dasharray', '4,3')
-      .attr('stroke-width', 1.6)
-      .attr('opacity', 0.5);
+    function updateAxes(xScale: d3.ScaleLinear<number, number>, yScale: d3.ScaleLinear<number, number>) {
+      xAxisG
+        .call(d3.axisBottom(xScale).ticks(6))
+        .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
+        .call((g) => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
+        .call((g) => g.selectAll('line').attr('stroke', '#e5e7eb'));
+
+      yAxisG
+        .call(d3.axisLeft(yScale).ticks(6))
+        .call((g) => g.selectAll('text').attr('font-size', 12).attr('fill', '#1f2937'))
+        .call((g) => g.selectAll('.domain').attr('stroke', '#cbd5e1'))
+        .call((g) => g.selectAll('line').attr('stroke', '#e5e7eb'));
+    }
+
+    updateAxes(x0, y0);
+
 
     // Points
-    plotArea
+    const circles = plotArea
       .selectAll('circle')
       .data(aggregated)
       .enter()
       .append('circle')
-      .attr('cx', (d) => x(d.generalMean))
-      .attr('cy', (d) => y(d.contraMean))
+      .attr('cx', (d) => x0(d.generalMean))
+      .attr('cy', (d) => y0(d.contraMean))
       .attr('r', 6)
       .attr('fill', (d) => (d.delta >= 0 ? COLORS.accent1 : COLORS.accent2))
       .attr('fill-opacity', 0.6)
@@ -172,6 +186,55 @@ export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHid
         d3.select(this).attr('fill-opacity', 0.6).attr('r', 6);
         onTooltipHide();
       });
+
+    // Identity line (needs to be updated on zoom)
+    const identityLine = plotArea
+      .append('line')
+      .attr('x1', x0(0))
+      .attr('y1', y0(0))
+      .attr('x2', x0(upper))
+      .attr('y2', y0(upper))
+      .attr('stroke', COLORS.accent2)
+      .attr('stroke-dasharray', '4,3')
+      .attr('stroke-width', 1.6)
+      .attr('opacity', 0.5);
+
+    // Add zoom behavior
+    const plotExtent: [[number, number], [number, number]] = [
+      [margin.left, margin.top],
+      [width - margin.right, height - margin.bottom],
+    ];
+
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([1, 6])
+      .extent(plotExtent)
+      .translateExtent(plotExtent)
+      .on('zoom', (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
+        const transform = event.transform;
+        zoomTransformRef.current = transform; // Store transform
+        const x = transform.rescaleX(x0);
+        const y = transform.rescaleY(y0);
+
+        // Update circles
+        circles.attr('cx', (d) => x(d.generalMean)).attr('cy', (d) => y(d.contraMean));
+
+        // Update identity line
+        identityLine.attr('x1', x(0)).attr('y1', y(0)).attr('x2', x(upper)).attr('y2', y(upper));
+
+        // Update axes and grids
+        updateAxes(x, y);
+        updateGrid(x, y);
+      });
+
+    svg.call(zoom);
+    
+    // Restore previous zoom state if it exists (use setTimeout to ensure zoom is fully initialized)
+    const savedTransform = zoomTransformRef.current;
+    if (savedTransform && savedTransform.k !== 1) {
+      // Use transition for smooth restoration
+      svg.transition().duration(0).call(zoom.transform, savedTransform);
+    }
 
     // Axis labels
     svg
@@ -235,7 +298,7 @@ export function ScatterPlot({ data, selectedRegions, onTooltipShow, onTooltipHid
       const textWidth = item.label.length * (legendFontSize * 0.6);
       lx += swatchSize + 8 + textWidth + itemGap;
     });
-  }, [data, selectedRegions, onTooltipShow, onTooltipHide]);
+  }, [data, selectedRegions]); // Remove tooltip callbacks from deps to prevent re-renders
 
   return <div ref={containerRef} className="dotplot-container" style={{ width: '100%', height: '100%' }} />;
 }

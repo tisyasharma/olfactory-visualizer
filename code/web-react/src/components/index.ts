@@ -2,4 +2,5 @@
 export * from './layout';
 export * from './controls';
 export * from './shared';
+export * from './viewer';
 export * from './visualizations';

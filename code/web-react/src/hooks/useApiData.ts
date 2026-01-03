@@ -31,7 +31,6 @@ export function useApiData<T>(
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Unknown error'));
-      console.error('API fetch error:', err);
     } finally {
       setLoading(false);
     }

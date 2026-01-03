@@ -10,8 +10,11 @@ interface TooltipProps {
 
 export function Tooltip({ content, visible, x, y, id = 'tooltip' }: TooltipProps) {
   const style: CSSProperties = {
+    position: 'fixed',
     left: `${x}px`,
     top: `${y}px`,
+    pointerEvents: 'none',
+    zIndex: 9999,
   };
 
   return (

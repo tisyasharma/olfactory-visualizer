@@ -1,4 +1,13 @@
 // Application constants
+// Ports and URLs are centralized here for consistency
+
+// Backend API Configuration
+export const API_PORT = 8000;
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `http://localhost:${API_PORT}`;
+
+// Frontend Configuration
+export const FRONTEND_PORT = 5173; // Vite default dev server port
+export const FRONTEND_URL = `http://localhost:${FRONTEND_PORT}`;
 
 // Default region selections for different visualizations
 
