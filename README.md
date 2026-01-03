@@ -1,4 +1,4 @@
-# Olfactory Data Visualizer
+# Olfactory Data Visualizer (Murthy Lab)
 
 Interactive dashboard for exploring mouse olfactory circuit connectivity data from the Murthy Lab at Harvard University.
 
