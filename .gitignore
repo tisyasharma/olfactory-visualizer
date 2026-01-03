@@ -7,12 +7,20 @@ __pycache__/
 .venv
 venv/
 ENV/
+capstone.egg-info/
+
+# --- Test Artifacts ---
+.pytest_cache/
+.coverage
+htmlcov/
 
 # --- Mac System Files ---
 .DS_Store
 
-# --- VS Code ---
+# --- IDE ---
 .vscode/
+.idea/
+*.code-workspace
 
 # --- PROJECT DATA (The Important Part) ---
 All Data/
@@ -27,3 +35,20 @@ database/processed_zarr/
 
 # --- Node ---
 node_modules/
+dist/
+
+# --- Database Dumps and SQL Files ---
+*.dump
+*.sql
+!code/database/schema.sql
+.backups/
+
+# --- Large Local Data Artifacts ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Environment Variables ---
+.env
+.env.local
+.env.*.local

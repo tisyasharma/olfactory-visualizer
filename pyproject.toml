@@ -4,25 +4,31 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "capstone"
-version = "0.0.1"
-description = "Olfactory data ETL and web assets"
+version = "0.1.0"
+description = "Olfactory data visualization platform - ETL pipeline and web dashboard"
 requires-python = ">=3.9"
 dependencies = [
     "pandas",
     "sqlalchemy",
     "psycopg2-binary",
     "numpy",
-    "ome-zarr",
+    "ome-zarr>=0.9,<0.10",
     "imageio",
     "dask",
-    "zarr",
+    "zarr>=2.16,<3",
     "fastapi",
     "uvicorn",
     "pydantic",
+    "python-multipart",
+    "scikit-image",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "Pillow",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
 
 [tool.setuptools.packages.find]
-where = ["code"]
+where = ["."]
+include = ["code*"]
