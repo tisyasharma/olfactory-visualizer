@@ -23,6 +23,11 @@ import numpy as np
 import zarr
 from ome_zarr.io import parse_url
 from ome_zarr.writer import write_image
+try:
+    from ome_zarr.scale import Scaler
+except ImportError:
+    # Fallback if Scaler import fails (e.g., due to numpy/skimage version issues)
+    Scaler = None
 from sqlalchemy import text, types as satypes
 
 from code.database.connect import get_engine
@@ -57,11 +62,25 @@ def write_omezarr(data: np.ndarray, dest: Path, pixel_size_um: float) -> None:
     root = zarr.group(store=store)
     darr = da.from_array(data, chunks=(data.shape[0], 512, 512))
     ps_m = pixel_size_um * 1e-6
+    
+    # Create multiscale pyramid for efficient web viewing
+    # This creates multiple resolution levels (e.g., 1x, 2x, 4x downsampled)
+    # Scaler() with default settings creates a 2x downsampling pyramid
+    scaler = Scaler() if Scaler is not None else None
+    
+    if scaler is None:
+        import warnings
+        warnings.warn(
+            "Scaler not available (numpy/skimage version issue). "
+            "Creating single-scale OME-Zarr. For multiscale support, update numpy/skimage versions.",
+            UserWarning
+        )
+    
     write_image(
         darr,
         group=root,
         axes="cyx",
-        scaler=None,
+        scaler=scaler,  # Use scaler to create multiscale pyramid (required for Viv/Vizarr)
         coordinate_transformations=[[{"type": "scale", "scale": [1.0, ps_m, ps_m]}]],
     )
 

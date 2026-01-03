@@ -4,7 +4,7 @@ Reason: seed subjects and one microscopy session per subject from subject_map; r
 """
 from sqlalchemy import text
 import pandas as pd
-from code.src.conversion.subject_map import SUBJECT_MAP
+from code.database.etl.subject_map import SUBJECT_MAP
 from .paths import BIDS_ROOT
 import re
 from .stats import bump

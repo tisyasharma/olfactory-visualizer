@@ -11,38 +11,51 @@ for p in (PROJECT_ROOT, CODE_ROOT):
         sys.path.insert(0, p)
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from code.api.routes import (
     data_router,
+    metrics_router,
     microscopy_router,
     region_counts_router,
     scrna_router,
 )
+from code.config import FRONTEND_URL, FRONTEND_PORT
 
-WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 app = FastAPI(title="Olfactory Data API", version="0.1.0")
-app.mount("/code/web", StaticFiles(directory=WEB_DIR, html=True), name="web")
+
+# CORS for React dev server and production
+# Frontend runs on port 5173 by default (Vite dev server)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        FRONTEND_URL,
+        f"http://127.0.0.1:{FRONTEND_PORT}",
+        f"http://localhost:{FRONTEND_PORT}",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Serve data directory for OME-Zarr viewer access
+# Use html=False to prevent directory listing, but allow file access
+# check_dir=False allows serving files even if parent directories don't exist as files
+app.mount("/data", StaticFiles(directory=DATA_DIR, html=False, check_dir=False), name="data")
 
 
 @app.get("/")
 def root():
-    """
-    Parameters:
-        None
-
-    Returns:
-        RedirectResponse: Redirect to the web dashboard.
-
-    Does:
-        Redirects the API root to serve the frontend index.
-    """
-    return RedirectResponse(url="/code/web/index.html")
+    """Redirect to React frontend (run via Vite dev server)."""
+    return RedirectResponse(url=FRONTEND_URL)
 
 
 # Wire routers
 app.include_router(data_router)
+app.include_router(metrics_router)
 app.include_router(microscopy_router)
 app.include_router(region_counts_router)
 app.include_router(scrna_router)

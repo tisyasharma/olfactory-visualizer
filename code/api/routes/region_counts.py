@@ -6,11 +6,13 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from sqlalchemy import text
 
-from code.api.deps import get_engine, resolve_session_id, sha256_path
-from code.src.conversion.subject_map import SUBJECT_MAP
+from code.api.dependencies import get_engine, resolve_session_id, require_role
+from code.common.hashing import file_sha256
+from code.api.utils import api_error
+from code.database.etl.subject_map import SUBJECT_MAP
 from code.api.services import uploads as upload_service
 from code.api.models import RegionCountSummary, DuplicateCheckResponse
 
@@ -26,6 +28,7 @@ async def create_region_counts(
     hemisphere: str = Form("auto", regex="^(left|right|bilateral|auto)$"),
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
     files: List[UploadFile] = File(...),
+    _user = Depends(require_role("lab_user")),
 ):
     """
     Parameters:
@@ -42,12 +45,14 @@ async def create_region_counts(
         Validates subject/session, checks for duplicates, stages CSVs, and ingests them into region_counts with logging.
     """
     if not files:
-        raise HTTPException(status_code=400, detail="No files provided")
+        raise api_error(400, "no_files", "No files provided")
     engine = get_engine()
     if subject_id not in ALLOWED_SUBJECTS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Subject ID '{subject_id}' is not allowed. Allowed: {sorted(ALLOWED_SUBJECTS)}",
+        raise api_error(
+            400,
+            "invalid_subject_id",
+            f"Subject ID '{subject_id}' is not allowed. Allowed: {sorted(ALLOWED_SUBJECTS)}",
+            {"subject_id": subject_id, "allowed_subjects": sorted(ALLOWED_SUBJECTS)},
         )
     sess = resolve_session_id(engine, subject_id, experiment_type, session_id)
 
@@ -58,12 +63,12 @@ async def create_region_counts(
         saved_hashes = {}
         for uf in files:
             if not uf.filename.lower().endswith(".csv"):
-                raise HTTPException(status_code=400, detail=f"Unsupported file type for {uf.filename}. Upload CSV only.")
+                raise api_error(400, "unsupported_file_type", f"Unsupported file type for {uf.filename}. Upload CSV only.", {"filename": uf.filename})
             dest = tmpdir / uf.filename
             with dest.open("wb") as f:
                 shutil.copyfileobj(uf.file, f)
             saved.append(dest)
-            saved_hashes[dest] = sha256_path(dest)
+            saved_hashes[dest] = file_sha256(dest)
 
         with engine.connect() as conn:
             dup = conn.execute(
@@ -79,9 +84,11 @@ async def create_region_counts(
                 {"sid": sess},
             ).first()
             if dup:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Session {sess} already has quantification rows registered. Duplicate ingest blocked.",
+                raise api_error(
+                    409,
+                    "duplicate_session",
+                    f"Session {sess} already has quantification rows registered. Duplicate ingest blocked.",
+                    {"session_id": sess},
                 )
             for chk in saved_hashes.values():
                 existing = conn.execute(
@@ -89,9 +96,11 @@ async def create_region_counts(
                     {"c": chk},
                 ).first()
                 if existing:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="This quantification file matches a previously ingested file (checksum duplicate).",
+                    raise api_error(
+                        409,
+                        "duplicate_checksum",
+                        "This quantification file matches a previously ingested file (checksum duplicate).",
+                        {"checksum": chk},
                     )
         for path in saved:
             try:
@@ -107,7 +116,7 @@ async def create_region_counts(
                             {"p": str(path), "c": chk, "r": rows, "s": "success", "m": f"upload {sess}"},
                         )
             except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e))
+                raise api_error(400, "validation_error", str(e))
         return {"status": "ok", "rows_ingested": rows}
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -115,7 +124,10 @@ async def create_region_counts(
 
 @router.post("/region-counts/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
 @router.post("/region-counts/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
-async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
+async def region_counts_duplicate_check(
+    files: List[UploadFile] = File(...),
+    _user = Depends(require_role("lab_user")),
+):
     """
     Parameters:
         files (list[UploadFile]): Uploaded quantification CSVs.
@@ -138,11 +150,13 @@ async def region_counts_duplicate_check(files: List[UploadFile] = File(...)):
             with dest.open("wb") as f:
                 shutil.copyfileobj(uf.file, f)
             if dest.stat().st_size == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"{uf.filename or 'CSV'} is 0 bytes. If this is a cloud placeholder (e.g., Dropbox online-only), make it available offline first.",
+                raise api_error(
+                    400,
+                    "empty_file",
+                    f"{uf.filename or 'CSV'} is 0 bytes. If this is a cloud placeholder (e.g., Dropbox online-only), make it available offline first.",
+                    {"filename": uf.filename or "CSV"},
                 )
-            saved_hashes.append(sha256_path(dest))
+            saved_hashes.append(file_sha256(dest))
         if not saved_hashes:
             return {"duplicate": False, "message": ""}
         saved_hashes.sort()

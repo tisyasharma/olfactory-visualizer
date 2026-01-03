@@ -14,7 +14,7 @@ from .utils import (
     file_sha256,
     clean_numeric,
 )
-from code.src.conversion.subject_map import SUBJECT_MAP
+from code.database.etl.subject_map import SUBJECT_MAP
 from .paths import DATA_ROOT
 from code.database.etl.counts_helper import prepare_counts_dataframe
 
@@ -52,7 +52,7 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
             exp_type = "rabies" if "rabies" in matched_key.lower() else "double_injection"
             hemi = detect_hemisphere(root, file)
             if hemi not in ("left","right","bilateral"):
-                print(f"   ⚠️ Skipping {file}: unrecognized hemisphere '{hemi}'")
+                print(f"   WARNING: Skipping {file}: unrecognized hemisphere '{hemi}'")
                 continue
 
             print(f"  Processing {file} ({hemi}) -> {subject_id}")
@@ -64,12 +64,12 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
             required_cols = {"Region ID", "Region name", "Region pixels", "Region area", "Load"}
             missing = required_cols - set(df.columns)
             if missing:
-                print(f"   ⚠️ Skipping {file}: missing required columns {missing}")
+                print(f"   WARNING: Skipping {file}: missing required columns {missing}")
                 continue
 
             optional_missing = {"Object count", "Object pixels", "Object area", "Norm load"} - set(df.columns)
             if optional_missing:
-                print(f"   ℹ️  {file}: optional columns missing {optional_missing} -> will fill NULLs")
+                print(f"   INFO: {file}: optional columns missing {optional_missing} -> will fill NULLs")
 
             df = df.rename(columns={
                 "Region ID": "region_id",

@@ -8,8 +8,7 @@ from .paths import DATA_ROOT, BIDS_ROOT, ATLAS_JSON, IMAGES_ROOT
 from . import subjects, bids, atlas, counts
 from .stats import summarize
 from .atlas import load_atlas
-from code.src.conversion.subject_map import SUBJECT_MAP
-from pathlib import Path
+from code.database.etl.subject_map import SUBJECT_MAP
 from .utils import ensure_batches_table
 from code.common.hashing import combine_hashes, file_sha256
 
@@ -63,7 +62,7 @@ def run_etl():
         "counts_skipped_missing_file": 0,
     }
 
-    print(f"\n🚀 Starting ETL Pipeline...")
+    print(f"\nStarting ETL Pipeline...")
     print(f"Reading data from: {DATA_ROOT}")
 
     # Step 1: subjects/sessions from config
@@ -105,7 +104,7 @@ def run_etl():
         conn.execute(text("INSERT INTO ingest_log (source_path, status, message) VALUES (:p, :s, :m)"),
                      {"p": str(DATA_ROOT), "s": "success", "m": "ETL complete"})
 
-    print("\n✅ ETL Complete. Database hydrated.")
+    print("\nETL Complete. Database hydrated.")
     print("\n--- Summary ---")
     print(summarize(stats))
 

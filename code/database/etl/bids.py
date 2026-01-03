@@ -11,7 +11,7 @@ from .utils import file_sha256, detect_hemisphere
 
 def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, allowed_subjects: set | None = None):
     if not BIDS_ROOT.exists():
-        print(f"⚠️ BIDS root not found at {BIDS_ROOT}, skipping file registration.")
+        print(f"WARNING: BIDS root not found at {BIDS_ROOT}, skipping file registration.")
         return
 
     if existing_hashes is None:
@@ -36,7 +36,7 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
         session_label = parts[1]
         if not re.match(r"^ses-[A-Za-z0-9]+$", session_label):
             stats["microscopy_skipped_bad_session_label"] = stats.get("microscopy_skipped_bad_session_label", 0) + 1
-            print(f"   ⚠️ Skipping {zarr}: invalid session label '{session_label}' (expected ses-XX).")
+            print(f"   WARNING: Skipping {zarr}: invalid session label '{session_label}' (expected ses-XX).")
             continue
         datatype = parts[2]
         if datatype != "micr":
@@ -75,7 +75,7 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
         )
 
     if not records:
-        print("⚠️ No OME-Zarr files found under BIDS root.")
+        print("WARNING: No OME-Zarr files found under BIDS root.")
         return
 
     sessions_rows = []

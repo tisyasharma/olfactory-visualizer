@@ -2,7 +2,9 @@
 Lightweight helpers for post-query munging/normalization.
 """
 from collections import defaultdict
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Optional, Dict, Any
+
+from fastapi import HTTPException
 
 
 def add_load_fraction(
@@ -68,9 +70,6 @@ def derive_genotype(details: str = None, experiment_type: str = None):
     Does:
         Quick string-based tagger to pick a genotype label from subject notes/experiment type.
     """
-    """
-    Quick string-based genotype tag so the client doesn't have to guess.
-    """
     label = " ".join([details or "", experiment_type or ""]).lower()
     # Treat dual-viral/double injection experiments as excitatory (Vglut1) for grouping.
     if experiment_type and experiment_type.lower() == "double_injection":
@@ -80,3 +79,31 @@ def derive_genotype(details: str = None, experiment_type: str = None):
     if "vglut" in label:
         return "Vglut1"
     return "other"
+
+
+def api_error(
+    status_code: int,
+    code: str,
+    message: str,
+    details: Optional[Dict[str, Any]] = None,
+) -> HTTPException:
+    """
+    Parameters:
+        status_code (int): HTTP status code (400, 401, 403, 409, etc.).
+        code (str): Machine-readable error code (e.g., "validation_error", "duplicate_upload").
+        message (str): Human-readable error message.
+        details (dict | None): Optional additional context.
+
+    Returns:
+        HTTPException: Standardized error response.
+
+    Does:
+        Creates an HTTPException with a consistent detail structure for API errors.
+    """
+    detail = {
+        "code": code,
+        "message": message,
+    }
+    if details:
+        detail["details"] = details
+    return HTTPException(status_code=status_code, detail=detail)

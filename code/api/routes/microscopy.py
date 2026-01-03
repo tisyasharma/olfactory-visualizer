@@ -7,11 +7,12 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body
-from code.api.deps import get_engine
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Body, Depends
+from code.api.dependencies import get_engine, require_role
 from code.api.services import uploads as upload_service
 from code.api.models import MicroscopyFile, DuplicateCheckResponse, HashesPayload
-from code.src.conversion.subject_map import SUBJECT_MAP
+from code.api.utils import api_error
+from code.database.etl.subject_map import SUBJECT_MAP
 
 
 router = APIRouter(prefix="/api/v1", tags=["microscopy"])
@@ -31,7 +32,7 @@ def _stage_images(files: List[UploadFile]):
         Validates extensions/size, writes uploads to a temp dir, and returns paths or raises HTTP errors.
     """
     if not files:
-        raise HTTPException(status_code=400, detail="No files provided")
+        raise api_error(400, "no_files", "No files provided")
     tmpdir = Path(tempfile.mkdtemp())
     saved_paths: List[Path] = []
     try:
@@ -39,18 +40,20 @@ def _stage_images(files: List[UploadFile]):
             fname = uf.filename or ""
             lower = fname.lower()
             if not lower.endswith(IMAGE_EXT):
-                raise HTTPException(status_code=400, detail=f"Unsupported file type for {fname}. Upload images only.")
+                raise api_error(400, "unsupported_file_type", f"Unsupported file type for {fname}. Upload images only.", {"filename": fname})
             dest = tmpdir / fname
             with dest.open("wb") as f:
                 shutil.copyfileobj(uf.file, f)
             if dest.stat().st_size == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"{fname} is 0 bytes. If this is a cloud placeholder (e.g., Dropbox online-only), make it available offline first.",
+                raise api_error(
+                    400,
+                    "empty_file",
+                    f"{fname} is 0 bytes. If this is a cloud placeholder (e.g., Dropbox online-only), make it available offline first.",
+                    {"filename": fname},
                 )
             saved_paths.append(dest)
         if not saved_paths:
-            raise HTTPException(status_code=400, detail="No valid image files found in upload.")
+            raise api_error(400, "no_valid_files", "No valid image files found in upload.")
         return tmpdir, saved_paths
     except Exception:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -66,6 +69,7 @@ async def create_microscopy_files(
     experiment_type: str = Form("double_injection", regex="^(double_injection|rabies)$"),
     comments: Optional[str] = Form(None, description="Optional notes/comments for this upload"),
     files: List[UploadFile] = File(...),
+    _user = Depends(require_role("lab_user")),
 ):
     """
     Parameters:
@@ -96,9 +100,9 @@ async def create_microscopy_files(
                 file_paths=saved_paths,
             )
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise api_error(400, "validation_error", str(exc)) from exc
         except upload_service.DuplicateUpload as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise api_error(409, "duplicate_upload", str(exc)) from exc
 
         ingested = upload_service.ingest_microscopy_files(
             engine=engine,
@@ -119,7 +123,10 @@ async def create_microscopy_files(
 
 @router.post("/microscopy-files/check-duplicate", status_code=200, response_model=DuplicateCheckResponse)
 @router.post("/microscopy-files/duplicate-check", status_code=200, response_model=DuplicateCheckResponse, deprecated=True)
-async def microscopy_files_duplicate_check(payload: Union[HashesPayload, List[str]] = Body(...)):
+async def microscopy_files_duplicate_check(
+    payload: Union[HashesPayload, List[str]] = Body(...),
+    _user = Depends(require_role("lab_user")),
+):
     """
     Parameters:
         payload (HashesPayload | list[str]): SHA256 hashes to compare against existing ingests.

@@ -7,9 +7,9 @@ import re
 from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
-from code.src.conversion.subject_map import SUBJECT_MAP
+from code.database.etl.subject_map import SUBJECT_MAP
 from typing import List
-from code.api.duplication import ensure_batches_table  # reuse shared hashing/table setup
+from code.database.deduplication import ensure_batches_table
 from code.common.hashing import file_sha256, combine_hashes
 
 

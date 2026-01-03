@@ -4,10 +4,9 @@ from typing import List, Optional
 
 from sqlalchemy import text, types as satypes
 
-from code.api.duplication import check_microscopy_duplicate, register_batch
-from code.common.hashing import combine_hashes, combine_hex_hashes
-from code.api.deps import sha256_path
-from code.api.settings import ALLOWED_SUBJECT_PREFIXES, DUPLICATE_MESSAGE
+from code.database.deduplication import check_microscopy_duplicate, register_batch
+from code.common.hashing import combine_hashes, combine_hex_hashes, file_sha256
+from code.config import ALLOWED_SUBJECT_PREFIXES, DUPLICATE_MESSAGE
 from code.database.etl.counts_helper import prepare_counts_dataframe
 
 logger = logging.getLogger(__name__)
@@ -177,7 +176,7 @@ def compute_batch_hash(paths: List[Path]):
     Does:
         Calculates per-file SHA256 hashes and an order-insensitive batch hash.
     """
-    file_shas = [sha256_path(p) for p in paths]
+    file_shas = [file_sha256(p) for p in paths]
     raw_batch_checksum = combine_hashes(paths)
     return raw_batch_checksum, file_shas
 
@@ -313,7 +312,7 @@ def prepare_microscopy_upload(
         existing_subjects = {r[0] for r in conn.execute(text("SELECT subject_id FROM subjects"))}
 
     # Resolve session id and block session-level duplicates
-    from code.api.deps import resolve_session_id  # local import to avoid cycle
+    from code.api.dependencies import resolve_session_id  # local import to avoid cycle
     session_id = resolve_session_id(engine, subject_id, experiment_type, session_id)
     with engine.connect() as conn:
         already = conn.execute(
