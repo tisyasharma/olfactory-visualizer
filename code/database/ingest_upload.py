@@ -38,13 +38,14 @@ BIDS_ROOT = ROOT / "data" / "raw_bids"
 
 
 def load_image(path: Path) -> np.ndarray:
-    # Allow large images but guard against pathological cases; suppress PIL warnings
+    # Allow large images but guard against pathological cases
+    # Suppress PIL warnings
     Image.MAX_IMAGE_PIXELS = None
     ImageFile.LOAD_TRUNCATED_IMAGES = True
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=Image.DecompressionBombWarning)
         arr = iio.imread(path)
-    # No hard cap; callers can downsample/tile manually if memory becomes an issue
+    # No hard cap, callers can downsample/tile manually if memory becomes an issue
     if arr.ndim == 2:
         arr = arr[np.newaxis, ...]
     elif arr.ndim == 3:
@@ -163,7 +164,7 @@ def ingest(subject: str, session: str, hemisphere: str, files: list[Path], pixel
                 )
             staged.append((idx, dest, sha))
 
-        # If we got here, all files are unique; register DB state now
+        # All files are unique, register DB state now
         with engine.begin() as conn:
             conn.execute(
                 text("""

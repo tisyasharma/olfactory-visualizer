@@ -54,7 +54,8 @@ def load_bids_files(engine, stats: dict, existing_hashes: set | None = None, all
                 run = None
         # sample is required in microscopy BIDS, but we treat it as metadata here
         # and focus on subject/session/run/hemisphere for DB registration.
-        # Hemisphere not encoded in filename anymore; detect from path/name hints.
+        # Hemisphere not encoded in filename anymore,
+        # detect from path/name hints.
         hemisphere = detect_hemisphere(zarr.parent.as_posix(), filename)
         sha = file_sha256(zarr)
         if sha in existing_hashes:

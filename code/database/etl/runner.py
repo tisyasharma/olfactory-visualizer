@@ -65,8 +65,8 @@ def run_etl():
     print(f"\nStarting ETL Pipeline...")
     print(f"Reading data from: {DATA_ROOT}")
 
-    # Step 1: subjects/sessions from config
-    print("\nStep 1: Loading Subjects")
+    # Load subjects and sessions from config
+    print("\nLoading Subjects")
     with engine.begin() as conn:
         allowed_subjects = {meta["subject"] for meta in SUBJECT_MAP.values()}
         subjects.cleanup_unknown_subjects(conn, allowed_subjects, stats)
@@ -78,15 +78,15 @@ def run_etl():
     # Seed batch hashes from sourcedata images for duplicate detection
     seed_batch_hashes(engine, allowed_subjects, stats)
 
-    # Step 2: BIDS imaging files
-    print("\nStep 2: Registering imaging files (BIDS)")
+    # Register BIDS imaging files
+    print("\nRegistering imaging files (BIDS)")
     print(f"BIDS root: {BIDS_ROOT}")
     bids.load_bids_files(engine, stats, allowed_subjects=allowed_subjects)
     file_map = bids.build_file_map(engine)
     bids.backfill_ingest_log(engine, stats)
 
-    # Step 3: Atlas
-    print("\nStep 3: Loading Allen Atlas Regions")
+    # Load brain atlas
+    print("\nLoading Allen Atlas Regions")
     load_atlas(engine)
     atlas_map = {}
     with engine.connect() as conn:
@@ -94,8 +94,8 @@ def run_etl():
         # ensure units present
         unit_map = {r._mapping["name"]: r._mapping["unit_id"] for r in conn.execute(text("SELECT unit_id, name FROM units"))}
 
-    # Step 4: Quantification CSVs
-    print("\nStep 4: Processing Quantification Files")
+    # Process quantification CSVs
+    print("\nProcessing Quantification Files")
     count_rows, session_rows_from_counts, extra_regions = counts.ingest_counts(engine, unit_map, atlas_map, file_map, stats)
     counts.insert_counts(engine, count_rows, session_rows_from_counts, extra_regions)
 

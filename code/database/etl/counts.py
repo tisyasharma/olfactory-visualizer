@@ -105,7 +105,8 @@ def ingest_counts(engine, unit_map, atlas_map, file_map, stats):
                         f"does not match reference '{ref_name}'."
                     )
 
-            # Images are bilateral; quant is split by hemisphere. Prefer hemi match, else use bilateral image.
+            # Images are bilateral, quant is split by hemisphere
+            # Prefer hemi match, else use bilateral image
             file_id = file_map.get((subject_id, hemi))
             if not file_id and hemi in ("left", "right"):
                 file_id = file_map.get((subject_id, "bilateral"))

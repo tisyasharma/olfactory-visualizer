@@ -30,7 +30,8 @@ def resolve_session_id(engine, subject_id: str, experiment_type: str, session_id
             return get_or_create_session_id(conn, subject_id, experiment_type)
     # Normalize to sub-xxx_ses-yy if caller passed a raw session label
     if not sid.startswith(f"{subject_id}_"):
-        # If they passed just ses-xx, attach subject_id; otherwise fallback to default
+        # If they passed just ses-xx, attach subject_id
+        # Otherwise fallback to default
         if sid.startswith("ses-"):
             return f"{subject_id}_{sid}"
         return f"{subject_id}_ses-01"

@@ -1,6 +1,5 @@
 """
-Thin ETL entrypoint.
-Reason: delegate to modular pipeline in code.database.etl.runner.
+ETL entrypoint to delegate to modular pipeline in code.database.etl.runner.
 """
 import sys
 from pathlib import Path
